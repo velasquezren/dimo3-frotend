@@ -213,6 +213,10 @@ body {
   transition: border-color 0.15s ease;
 }
 
+.input-field-search {
+  padding-left: 36px !important;
+}
+
 .input-field:hover {
   border-color: var(--border-hover);
 }
