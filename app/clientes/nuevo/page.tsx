@@ -101,7 +101,7 @@ export default function NuevoClientePage() {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             className="input-field"
-            placeholder="+52 55 1234 5678"
+            placeholder="+591 712 34567"
           />
           <p className="text-xs mt-1 text-text-tertiary">
             Opcional. Formato libre.

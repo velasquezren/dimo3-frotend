@@ -19,48 +19,48 @@ function guid(): string {
 let customers: Customer[] = [
   {
     id: 'c1a2b3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
-    fullName: 'Mariana Torres López',
-    email: 'mariana.torres@industek.com',
-    phone: '+52 55 1234 5678',
+    fullName: 'Mariana Choque Condori',
+    email: 'mariana.choque@industek.bo',
+    phone: '+591 712 34567',
     isActive: true,
     createdAt: '2025-01-15T10:30:00Z',
   },
   {
     id: 'c2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
-    fullName: 'Roberto Ángel Vega',
-    email: 'rvega@construcciones-del-norte.mx',
-    phone: '+52 81 9876 5432',
+    fullName: 'Roberto Mamani Quispe',
+    email: 'rmamani@construcciones-bolivia.bo',
+    phone: '+591 721 98765',
     isActive: true,
     createdAt: '2025-02-20T14:15:00Z',
   },
   {
     id: 'c3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f',
-    fullName: 'Catalina Ramos Uribe',
-    email: 'cramos@ferremax.com',
+    fullName: 'Catalina Flores Vaca',
+    email: 'cflores@ferremax.bo',
     phone: '',
     isActive: true,
     createdAt: '2025-03-10T09:00:00Z',
   },
   {
     id: 'c4d5e6f7-b8c9-4d0e-1f2a-3b4c5d6e7f8a',
-    fullName: 'Andrés Mendoza Ríos',
-    email: 'amendoza@logistica-sur.com',
-    phone: '+52 33 5544 3322',
+    fullName: 'Andrés Vargas Justiniano',
+    email: 'avargas@logistica-oriente.bo',
+    phone: '+591 733 55443',
     isActive: true,
     createdAt: '2025-04-05T16:45:00Z',
   },
   {
     id: 'c5e6f7a8-c9d0-4e1f-2a3b-4c5d6e7f8a9b',
-    fullName: 'Elena Fuentes Paredes',
-    email: 'efuentes@aceros-central.mx',
-    phone: '+52 222 7788 9900',
+    fullName: 'Elena Pinto Arias',
+    email: 'epinto@aceros-central.bo',
+    phone: '+591 762 27788',
     isActive: false,
     createdAt: '2024-11-22T11:20:00Z',
   },
   {
     id: 'c6f7a8b9-d0e1-4f2a-3b4c-5d6e7f8a9b0c',
-    fullName: 'Diego Salazar Montiel',
-    email: 'dsalazar@quimicos-atlas.com',
+    fullName: 'Diego Copana Siles',
+    email: 'dcopana@quimicos-altas.bo',
     phone: '',
     isActive: true,
     createdAt: '2025-05-18T08:30:00Z',
@@ -172,7 +172,7 @@ let orders: Order[] = [
   {
     id: 'o1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c',
     customerId: 'c1a2b3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
-    customerName: 'Mariana Torres López',
+    customerName: 'Mariana Choque Condori',
     orderDate: '2025-06-01T10:00:00Z',
     status: 'Delivered',
     items: [
@@ -184,7 +184,7 @@ let orders: Order[] = [
   {
     id: 'o2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d',
     customerId: 'c2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
-    customerName: 'Roberto Ángel Vega',
+    customerName: 'Roberto Mamani Quispe',
     orderDate: '2025-06-10T14:30:00Z',
     status: 'Confirmed',
     items: [
@@ -196,7 +196,7 @@ let orders: Order[] = [
   {
     id: 'o3c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7e',
     customerId: 'c3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f',
-    customerName: 'Catalina Ramos Uribe',
+    customerName: 'Catalina Flores Vaca',
     orderDate: '2025-06-15T09:15:00Z',
     status: 'Pending',
     items: [
@@ -208,7 +208,7 @@ let orders: Order[] = [
   {
     id: 'o4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f',
     customerId: 'c4d5e6f7-b8c9-4d0e-1f2a-3b4c5d6e7f8a',
-    customerName: 'Andrés Mendoza Ríos',
+    customerName: 'Andrés Vargas Justiniano',
     orderDate: '2025-06-20T16:00:00Z',
     status: 'Cancelled',
     items: [
@@ -219,7 +219,7 @@ let orders: Order[] = [
   {
     id: 'o5e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f9a',
     customerId: 'c6f7a8b9-d0e1-4f2a-3b4c-5d6e7f8a9b0c',
-    customerName: 'Diego Salazar Montiel',
+    customerName: 'Diego Copana Siles',
     orderDate: '2025-07-01T11:45:00Z',
     status: 'Pending',
     items: [

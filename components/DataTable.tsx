@@ -62,7 +62,8 @@ export default function DataTable({
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder={searchPlaceholder}
-            className="input-field input-field-search w-full"
+            className="input-field w-full"
+            style={{ paddingLeft: '40px' }}
             aria-label={searchPlaceholder}
           />
         </div>
