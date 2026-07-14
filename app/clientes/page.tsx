@@ -72,7 +72,7 @@ export default function ClientesPage() {
       label: 'Alta',
       render: (_: any, row: any) => (
         <span className="font-data text-xs text-text-tertiary">
-          {new Date(row.createdAt).toLocaleDateString('es-MX', {
+          {new Date(row.createdAt).toLocaleDateString('es-BO', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',

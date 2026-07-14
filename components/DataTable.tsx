@@ -42,11 +42,11 @@ export default function DataTable({
     <div className="space-y-4">
       {/* Search bar */}
       {onSearch && (
-        <div className="relative">
+        <div className="relative max-w-sm">
           <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary"
-            width="16"
-            height="16"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
+            width="15"
+            height="15"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -62,7 +62,7 @@ export default function DataTable({
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder={searchPlaceholder}
-            className="input-field pl-10 max-w-sm"
+            className="input-field pl-9 w-full"
             aria-label={searchPlaceholder}
           />
         </div>

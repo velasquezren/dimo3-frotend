@@ -19,7 +19,7 @@ export default function NuevoProductoPage() {
     if (!name.trim()) newErrors.name = 'El nombre es obligatorio.';
     const priceNum = parseFloat(price);
     if (!price || isNaN(priceNum) || priceNum <= 0) {
-      newErrors.price = 'El precio debe ser un número mayor a $0.';
+      newErrors.price = 'El precio debe ser un número mayor a Bs 0.';
     }
     const stockNum = parseInt(stock, 10);
     if (stock === '' || isNaN(stockNum) || stockNum < 0) {
@@ -105,7 +105,7 @@ export default function NuevoProductoPage() {
               Precio <span className="text-alert">*</span>
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary font-data text-sm">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary font-data text-sm">Bs</span>
               <input
                 id="price"
                 type="number"
@@ -113,12 +113,12 @@ export default function NuevoProductoPage() {
                 min="0.01"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                className={`input-field pl-7 font-data ${errors.price ? 'input-error' : ''}`}
+                className={`input-field pl-9 font-data ${errors.price ? 'input-error' : ''}`}
                 placeholder="0.00"
               />
             </div>
             <p className={`text-xs mt-1 ${errors.price ? 'text-alert' : 'text-text-tertiary'}`}>
-              {errors.price || 'Debe ser mayor a $0. Usa punto decimal.'}
+              {errors.price || 'Debe ser mayor a Bs 0. Usa punto decimal.'}
             </p>
           </div>
 

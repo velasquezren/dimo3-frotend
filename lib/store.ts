@@ -320,7 +320,7 @@ export function getProductById(id: string): Product | undefined {
 
 export function createProduct(data: { name: string; description: string; price: number; stock: number }): { success: boolean; error?: string; product?: Product } {
   if (!data.name.trim()) return { success: false, error: 'El nombre es obligatorio.' };
-  if (data.price <= 0) return { success: false, error: 'El precio debe ser mayor a $0.' };
+  if (data.price <= 0) return { success: false, error: 'El precio debe ser mayor a Bs 0.' };
   if (data.stock < 0 || !Number.isInteger(data.stock)) return { success: false, error: 'El stock debe ser un número entero mayor o igual a 0.' };
   const product: Product = {
     id: guid(),
@@ -339,7 +339,7 @@ export function updateProduct(id: string, data: { name: string; description: str
   const idx = products.findIndex((p) => p.id === id);
   if (idx === -1) return { success: false, error: 'Producto no encontrado.' };
   if (!data.name.trim()) return { success: false, error: 'El nombre es obligatorio.' };
-  if (data.price <= 0) return { success: false, error: 'El precio debe ser mayor a $0.' };
+  if (data.price <= 0) return { success: false, error: 'El precio debe ser mayor a Bs 0.' };
   if (data.stock < 0 || !Number.isInteger(data.stock)) return { success: false, error: 'El stock debe ser un número entero mayor o igual a 0.' };
   products[idx] = {
     ...products[idx],

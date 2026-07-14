@@ -169,7 +169,7 @@ export default function NuevoPedidoPage() {
                 .filter((p) => p.stock > 0)
                 .map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — ${p.price.toFixed(2)} (stock: {p.stock})
+                    {p.name} — Bs {p.price.toFixed(2)} (stock: {p.stock})
                   </option>
                 ))}
             </select>
@@ -222,7 +222,7 @@ export default function NuevoPedidoPage() {
                   <tr key={item.productId}>
                     <td className="text-text-primary font-medium">{item.productName}</td>
                     <td className="font-data text-text-secondary">
-                      ${item.unitPrice.toFixed(2)}
+                      Bs {item.unitPrice.toFixed(2)}
                     </td>
                     <td>
                       <input
@@ -236,7 +236,7 @@ export default function NuevoPedidoPage() {
                       />
                     </td>
                     <td className="font-data text-text-primary font-semibold">
-                      ${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                      Bs {item.subtotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                     </td>
                     <td>
                       <button
@@ -261,7 +261,7 @@ export default function NuevoPedidoPage() {
             <div className="flex items-center justify-between px-4 py-3 bg-bg-surface-hover border-t border-border">
               <span className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Total</span>
               <span className="font-data text-lg font-bold text-accent-primary">
-                ${total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                Bs {total.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </div>

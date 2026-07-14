@@ -43,7 +43,7 @@ export default function ProductoDetailPage({ params }: { params: Promise<{ id: s
     const newErrors: Record<string, string> = {};
     if (!name.trim()) newErrors.name = 'El nombre es obligatorio.';
     const priceNum = parseFloat(price);
-    if (!price || isNaN(priceNum) || priceNum <= 0) newErrors.price = 'El precio debe ser mayor a $0.';
+    if (!price || isNaN(priceNum) || priceNum <= 0) newErrors.price = 'El precio debe ser mayor a Bs 0.';
     const stockNum = parseInt(stock, 10);
     if (stock === '' || isNaN(stockNum) || stockNum < 0) newErrors.stock = 'El stock debe ser ≥ 0.';
     setErrors(newErrors);
@@ -110,7 +110,7 @@ export default function ProductoDetailPage({ params }: { params: Promise<{ id: s
           ID: {productId}
         </p>
         <p className="text-xs text-text-tertiary mt-0.5">
-          Alta: {createdAt ? new Date(createdAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }) : ''}
+          Alta: {createdAt ? new Date(createdAt).toLocaleDateString('es-BO', { day: '2-digit', month: 'long', year: 'numeric' }) : ''}
         </p>
         {stock && <div className="mt-2"><StockIndicator stock={parseInt(stock, 10) || 0} /></div>}
       </div>
@@ -149,13 +149,13 @@ export default function ProductoDetailPage({ params }: { params: Promise<{ id: s
               Precio <span className="text-alert">*</span>
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary font-data text-sm">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary font-data text-sm">Bs</span>
               <input id="price" type="number" step="0.01" min="0.01" value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                className={`input-field pl-7 font-data ${errors.price ? 'input-error' : ''}`} />
+                className={`input-field pl-9 font-data ${errors.price ? 'input-error' : ''}`} />
             </div>
             <p className={`text-xs mt-1 ${errors.price ? 'text-alert' : 'text-text-tertiary'}`}>
-              {errors.price || 'Mayor a $0.'}
+              {errors.price || 'Mayor a Bs 0.'}
             </p>
           </div>
           <div>

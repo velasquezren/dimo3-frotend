@@ -87,7 +87,7 @@ export default function PedidoDetailPage({ params }: { params: Promise<{ id: str
               <div className="text-sm text-text-secondary">
                 <span className="text-text-tertiary">Fecha:</span>{' '}
                 <span className="font-data text-xs">
-                  {new Date(order.orderDate).toLocaleDateString('es-MX', {
+                  {new Date(order.orderDate).toLocaleDateString('es-BO', {
                     day: '2-digit',
                     month: 'long',
                     year: 'numeric',
@@ -148,11 +148,11 @@ export default function PedidoDetailPage({ params }: { params: Promise<{ id: str
               <tr key={item.productId}>
                 <td className="text-text-primary font-medium">{item.productName}</td>
                 <td className="font-data text-text-secondary text-right">
-                  ${item.unitPrice.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  Bs {item.unitPrice.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                 </td>
                 <td className="font-data text-text-primary text-center">{item.quantity}</td>
                 <td className="font-data text-text-primary font-semibold text-right">
-                  ${item.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  Bs {item.subtotal.toLocaleString('es-BO', { minimumFractionDigits: 2 })}
                 </td>
               </tr>
             ))}
@@ -163,7 +163,7 @@ export default function PedidoDetailPage({ params }: { params: Promise<{ id: str
         <div className="flex items-center justify-between px-4 py-4 bg-bg-surface-hover border-t border-border">
           <span className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Total del Pedido</span>
           <span className="font-data text-xl font-bold text-accent-primary">
-            ${order.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            Bs {order.total.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
       </div>

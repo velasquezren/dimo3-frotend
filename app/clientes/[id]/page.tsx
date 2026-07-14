@@ -107,7 +107,7 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
           ID: {customerId}
         </p>
         <p className="text-xs text-text-tertiary mt-0.5">
-          Alta: {createdAt ? new Date(createdAt).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }) : ''}
+          Alta: {createdAt ? new Date(createdAt).toLocaleDateString('es-BO', { day: '2-digit', month: 'long', year: 'numeric' }) : ''}
         </p>
       </div>
 

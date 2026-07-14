@@ -51,7 +51,7 @@ export default function ProductosPage() {
       label: 'Precio',
       render: (_: any, row: any) => (
         <span className="font-data text-sm text-text-primary">
-          ${row.price.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          Bs {row.price.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
       ),
     },

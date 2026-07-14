@@ -38,7 +38,7 @@ export default function PedidosPage() {
       label: 'Fecha',
       render: (_: any, row: any) => (
         <span className="font-data text-xs text-text-tertiary">
-          {new Date(row.orderDate).toLocaleDateString('es-MX', {
+          {new Date(row.orderDate).toLocaleDateString('es-BO', {
             day: '2-digit',
             month: 'short',
             year: 'numeric',
@@ -57,7 +57,7 @@ export default function PedidosPage() {
       label: 'Total',
       render: (_: any, row: any) => (
         <span className="font-data text-sm text-text-primary font-semibold">
-          ${row.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          Bs {row.total.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
       ),
     },
