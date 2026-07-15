@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 import StockIndicator from '@/components/StockIndicator';
-import { getProductById, updateProduct, deactivateProduct } from '@/lib/store';
+import { fetchProductById, apiUpdateProduct, apiDeactivateProduct } from '@/lib/api';
 
 export default function ProductoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -23,20 +23,26 @@ export default function ProductoDetailPage({ params }: { params: Promise<{ id: s
   const [successMsg, setSuccessMsg] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const product = getProductById(id);
-    if (!product) {
-      setNotFound(true);
-      return;
-    }
-    setName(product.name);
-    setDescription(product.description);
-    setPrice(product.price.toString());
-    setStock(product.stock.toString());
-    setIsActive(product.isActive);
-    setCreatedAt(product.createdAt);
-    setProductId(product.id);
+    setLoading(true);
+    fetchProductById(id)
+      .then((product) => {
+        setName(product.name);
+        setDescription(product.description);
+        setPrice(product.price.toString());
+        setStock(product.stock.toString());
+        setIsActive(product.isActive);
+        setCreatedAt(product.createdAt);
+        setProductId(product.id);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setNotFound(true);
+        setLoading(false);
+      });
   }, [id]);
 
   function validate(): boolean {
@@ -50,30 +56,34 @@ export default function ProductoDetailPage({ params }: { params: Promise<{ id: s
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setGlobalError('');
     setSuccessMsg('');
     if (!validate()) return;
 
-    const result = updateProduct(id, {
-      name,
-      description,
-      price: parseFloat(price),
-      stock: parseInt(stock, 10),
-    });
-    if (result.success) {
+    try {
+      // El backend solo permite PATCH de price y stock, el nombre no se actualiza vía API
+      await apiUpdateProduct(id, {
+        price: parseFloat(price),
+        stock: parseInt(stock, 10),
+      });
       setSuccessMsg('Producto actualizado correctamente.');
       setTimeout(() => setSuccessMsg(''), 3000);
-    } else {
-      setGlobalError(result.error || 'Error al actualizar.');
+    } catch (err: any) {
+      setGlobalError(err.message || 'Error al actualizar.');
     }
   }
 
-  const handleDeactivate = useCallback(() => {
-    deactivateProduct(id);
-    setShowModal(false);
-    setIsActive(false);
+  const handleDeactivate = useCallback(async () => {
+    try {
+      await apiDeactivateProduct(id);
+      setShowModal(false);
+      setIsActive(false);
+    } catch (err: any) {
+      setGlobalError(err.message || 'Error al desactivar.');
+      setShowModal(false);
+    }
   }, [id]);
 
   if (notFound) {

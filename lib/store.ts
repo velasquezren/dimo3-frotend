@@ -174,7 +174,7 @@ let orders: Order[] = [
     customerId: 'c1a2b3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
     customerName: 'Mariana Choque Condori',
     orderDate: '2025-06-01T10:00:00Z',
-    status: 'Delivered',
+    status: 'DELIVERED',
     items: [
       { productId: 'p1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c', productName: 'Guantes de nitrilo industrial', quantity: 5, unitPrice: 285.50, subtotal: 1427.50 },
       { productId: 'p2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d', productName: 'Casco de seguridad tipo II', quantity: 10, unitPrice: 189.00, subtotal: 1890.00 },
@@ -186,7 +186,7 @@ let orders: Order[] = [
     customerId: 'c2b3c4d5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
     customerName: 'Roberto Mamani Quispe',
     orderDate: '2025-06-10T14:30:00Z',
-    status: 'Confirmed',
+    status: 'CONFIRMED',
     items: [
       { productId: 'p4d5e6f7-a8b9-4c0d-1e2f-3a4b5c6d7e8f', productName: 'Cemento gris 50kg', quantity: 50, unitPrice: 215.00, subtotal: 10750.00 },
       { productId: 'p6f7a8b9-c0d1-4e2f-3a4b-5c6d7e8f9a0b', productName: 'Lámina galvanizada cal. 26', quantity: 10, unitPrice: 520.00, subtotal: 5200.00 },
@@ -198,7 +198,7 @@ let orders: Order[] = [
     customerId: 'c3c4d5e6-a7b8-4c9d-0e1f-2a3b4c5d6e7f',
     customerName: 'Catalina Flores Vaca',
     orderDate: '2025-06-15T09:15:00Z',
-    status: 'Pending',
+    status: 'PENDING',
     items: [
       { productId: 'p3c4d5e6-f7a8-4b9c-0d1e-2f3a4b5c6d7e', productName: 'Taladro percutor 800W', quantity: 3, unitPrice: 1450.00, subtotal: 4350.00 },
       { productId: 'p7a8b9c0-d1e2-4f3a-4b5c-6d7e8f9a0b1c', productName: 'Arnés de cuerpo completo', quantity: 2, unitPrice: 1780.00, subtotal: 3560.00 },
@@ -210,7 +210,7 @@ let orders: Order[] = [
     customerId: 'c4d5e6f7-b8c9-4d0e-1f2a-3b4c5d6e7f8a',
     customerName: 'Andrés Vargas Justiniano',
     orderDate: '2025-06-20T16:00:00Z',
-    status: 'Cancelled',
+    status: 'CANCELLED',
     items: [
       { productId: 'p5e6f7a8-b9c0-4d1e-2f3a-4b5c6d7e8f9a', productName: 'Cable THW calibre 12', quantity: 2, unitPrice: 890.00, subtotal: 1780.00 },
     ],
@@ -221,7 +221,7 @@ let orders: Order[] = [
     customerId: 'c6f7a8b9-d0e1-4f2a-3b4c-5d6e7f8a9b0c',
     customerName: 'Diego Copana Siles',
     orderDate: '2025-07-01T11:45:00Z',
-    status: 'Pending',
+    status: 'PENDING',
     items: [
       { productId: 'pa0b1c2d-3e4f-4a5b-6c7d-8e9f0a1b2c3d', productName: 'Soldadora inversor 200A', quantity: 1, unitPrice: 4250.00, subtotal: 4250.00 },
       { productId: 'p9c0d1e2-f3a4-4b5c-6d7e-8f9a0b1c2d3e', productName: 'Tubo PVC hidráulico 2"', quantity: 20, unitPrice: 95.50, subtotal: 1910.00 },
@@ -420,7 +420,7 @@ export function createOrder(data: {
     customerId: customer.id,
     customerName: customer.fullName,
     orderDate: new Date().toISOString(),
-    status: 'Pending',
+    status: 'PENDING',
     items: orderItems,
     total: orderItems.reduce((sum, i) => sum + i.subtotal, 0),
   };
@@ -446,7 +446,7 @@ export function getCounts(): { customers: number; products: number; orders: numb
     orders: orders.length,
     activeCustomers: customers.filter((c) => c.isActive).length,
     activeProducts: products.filter((p) => p.isActive).length,
-    pendingOrders: orders.filter((o) => o.status === 'Pending').length,
+    pendingOrders: orders.filter((o) => o.status === 'PENDING').length,
   };
 }
 

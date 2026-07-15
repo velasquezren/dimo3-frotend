@@ -3,15 +3,15 @@
 import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import StatusBadge from '@/components/StatusBadge';
-import { getOrderById, updateOrderStatus } from '@/lib/store';
+import { fetchOrderById, apiUpdateOrderStatus } from '@/lib/api';
 import type { Order, OrderStatus } from '@/lib/types';
 
-const allStatuses: OrderStatus[] = ['Pending', 'Confirmed', 'Delivered', 'Cancelled'];
-const statusLabels: Record<OrderStatus, string> = {
-  Pending: 'Pendiente',
-  Confirmed: 'Confirmado',
-  Delivered: 'Entregado',
-  Cancelled: 'Cancelado',
+const allStatuses: OrderStatus[] = ['PENDING', 'CONFIRMED', 'DELIVERED', 'CANCELLED'];
+const statusLabels: Record<string, string> = {
+  PENDING: 'Pendiente',
+  CONFIRMED: 'Confirmado',
+  DELIVERED: 'Entregado',
+  CANCELLED: 'Cancelado',
 };
 
 export default function PedidoDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,26 +23,28 @@ export default function PedidoDetailPage({ params }: { params: Promise<{ id: str
   const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
-    const o = getOrderById(id);
-    if (!o) {
-      setNotFound(true);
-      return;
-    }
-    setOrder(o);
+    fetchOrderById(id)
+      .then((o) => setOrder(o))
+      .catch((err) => {
+        console.error(err);
+        setNotFound(true);
+      });
   }, [id]);
 
-  function handleStatusChange(newStatus: OrderStatus) {
+  async function handleStatusChange(newStatus: OrderStatus) {
     if (!order || order.status === newStatus) return;
 
-    const result = updateOrderStatus(id, newStatus);
-    if (result.success) {
-      setOrder((prev) => prev ? { ...prev, status: newStatus } : prev);
+    try {
+      const updated = await apiUpdateOrderStatus(id, newStatus);
+      setOrder(updated);
       setAnimateStamp(true);
       setStatusMessage(`Estado cambiado a "${statusLabels[newStatus]}".`);
       setTimeout(() => {
         setAnimateStamp(false);
         setStatusMessage('');
       }, 2000);
+    } catch (err: any) {
+      console.error(err);
     }
   }
 

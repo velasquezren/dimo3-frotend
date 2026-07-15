@@ -4,7 +4,7 @@ import { use, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
-import { getCustomerById, updateCustomer, deactivateCustomer } from '@/lib/store';
+import { fetchCustomerById, apiUpdateCustomer, apiDeactivateCustomer } from '@/lib/api';
 
 export default function ClienteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -21,19 +21,25 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
   const [successMsg, setSuccessMsg] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const customer = getCustomerById(id);
-    if (!customer) {
-      setNotFound(true);
-      return;
-    }
-    setFullName(customer.fullName);
-    setEmail(customer.email);
-    setPhone(customer.phone);
-    setIsActive(customer.isActive);
-    setCreatedAt(customer.createdAt);
-    setCustomerId(customer.id);
+    setLoading(true);
+    fetchCustomerById(id)
+      .then((customer) => {
+        setFullName(customer.fullName);
+        setEmail(customer.email);
+        setPhone(customer.phone);
+        setIsActive(customer.isActive);
+        setCreatedAt(customer.createdAt);
+        setCustomerId(customer.id);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setNotFound(true);
+        setLoading(false);
+      });
   }, [id]);
 
   function validate(): boolean {
@@ -48,25 +54,30 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setGlobalError('');
     setSuccessMsg('');
     if (!validate()) return;
 
-    const result = updateCustomer(id, { fullName, email, phone });
-    if (result.success) {
+    try {
+      await apiUpdateCustomer(id, { fullName, email, phone });
       setSuccessMsg('Cliente actualizado correctamente.');
       setTimeout(() => setSuccessMsg(''), 3000);
-    } else {
-      setGlobalError(result.error || 'Error al actualizar.');
+    } catch (err: any) {
+      setGlobalError(err.message || 'Error al actualizar.');
     }
   }
 
-  const handleDeactivate = useCallback(() => {
-    deactivateCustomer(id);
-    setShowModal(false);
-    setIsActive(false);
+  const handleDeactivate = useCallback(async () => {
+    try {
+      await apiDeactivateCustomer(id);
+      setShowModal(false);
+      setIsActive(false);
+    } catch (err: any) {
+      setGlobalError(err.message || 'Error al desactivar.');
+      setShowModal(false);
+    }
   }, [id]);
 
   if (notFound) {

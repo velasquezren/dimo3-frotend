@@ -1,25 +1,41 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import DataTable from '@/components/DataTable';
 import StockIndicator from '@/components/StockIndicator';
 import Modal from '@/components/Modal';
-import { getProducts, deactivateProduct } from '@/lib/store';
+import { fetchProducts, apiDeactivateProduct } from '@/lib/api';
 import type { Product } from '@/lib/types';
 
 export default function ProductosPage() {
   const [search, setSearch] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [modalTarget, setModalTarget] = useState<Product | null>(null);
+  const [data, setData] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const data = getProducts(search);
+  useEffect(() => {
+    setLoading(true);
+    fetchProducts(search)
+      .then((products) => {
+        setData(products);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, [search, refreshKey]);
 
   const handleDeactivate = useCallback(() => {
     if (modalTarget) {
-      deactivateProduct(modalTarget.id);
-      setModalTarget(null);
-      setRefreshKey((k) => k + 1);
+      apiDeactivateProduct(modalTarget.id)
+        .then(() => {
+          setModalTarget(null);
+          setRefreshKey((k) => k + 1);
+        })
+        .catch(console.error);
     }
   }, [modalTarget]);
 

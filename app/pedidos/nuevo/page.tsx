@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getActiveCustomers, getActiveProducts, getProductById, createOrder } from '@/lib/store';
+import { fetchCustomers, fetchProducts, apiCreateOrder } from '@/lib/api';
+import type { Customer, Product } from '@/lib/types';
 
 interface LineItem {
   productId: string;
@@ -16,8 +17,8 @@ interface LineItem {
 
 export default function NuevoPedidoPage() {
   const router = useRouter();
-  const activeCustomers = getActiveCustomers();
-  const activeProducts = getActiveProducts();
+  const [activeCustomers, setActiveCustomers] = useState<Customer[]>([]);
+  const [activeProducts, setActiveProducts] = useState<Product[]>([]);
 
   const [customerId, setCustomerId] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
@@ -25,12 +26,18 @@ export default function NuevoPedidoPage() {
   const [quantity, setQuantity] = useState('1');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetchCustomers().then((cs) => setActiveCustomers(cs.filter((c) => c.isActive))).catch(console.error);
+    fetchProducts().then((ps) => setActiveProducts(ps.filter((p) => p.isActive))).catch(console.error);
+  }, []);
 
   const total = items.reduce((sum, item) => sum + item.subtotal, 0);
 
   function addItem() {
     if (!selectedProduct) return;
-    const product = getProductById(selectedProduct);
+    const product = activeProducts.find((p) => p.id === selectedProduct);
     if (!product) return;
 
     // Check if already added
@@ -86,7 +93,7 @@ export default function NuevoPedidoPage() {
     setItems((prev) => prev.filter((i) => i.productId !== productId));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setGlobalError('');
     const newErrors: Record<string, string> = {};
@@ -99,15 +106,17 @@ export default function NuevoPedidoPage() {
       return;
     }
 
-    const result = createOrder({
-      customerId,
-      items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-    });
-
-    if (result.success) {
+    setSubmitting(true);
+    try {
+      await apiCreateOrder({
+        customerId,
+        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      });
       router.push('/pedidos');
-    } else {
-      setGlobalError(result.error || 'Error al crear el pedido.');
+    } catch (err: any) {
+      setGlobalError(err.message || 'Error al crear el pedido.');
+    } finally {
+      setSubmitting(false);
     }
   }
 

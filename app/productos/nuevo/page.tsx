@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createProduct } from '@/lib/store';
+import { apiCreateProduct } from '@/lib/api';
 
 export default function NuevoProductoPage() {
   const router = useRouter();
@@ -13,6 +13,7 @@ export default function NuevoProductoPage() {
   const [stock, setStock] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
@@ -31,21 +32,24 @@ export default function NuevoProductoPage() {
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setGlobalError('');
     if (!validate()) return;
 
-    const result = createProduct({
-      name,
-      description,
-      price: parseFloat(price),
-      stock: parseInt(stock, 10),
-    });
-    if (result.success) {
+    setSubmitting(true);
+    try {
+      await apiCreateProduct({
+        name,
+        description,
+        price: parseFloat(price),
+        stock: parseInt(stock, 10),
+      });
       router.push('/productos');
-    } else {
-      setGlobalError(result.error || 'Error al crear el producto.');
+    } catch (err: any) {
+      setGlobalError(err.message || 'Error al crear el producto.');
+    } finally {
+      setSubmitting(false);
     }
   }
 

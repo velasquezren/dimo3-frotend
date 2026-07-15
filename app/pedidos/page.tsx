@@ -1,16 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import DataTable from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
-import { getOrders } from '@/lib/store';
+import { fetchOrders } from '@/lib/api';
 import type { Order } from '@/lib/types';
 
 export default function PedidosPage() {
   const [search, setSearch] = useState('');
+  const [data, setData] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const data = getOrders(search);
+  useEffect(() => {
+    setLoading(true);
+    fetchOrders(search)
+      .then((orders) => {
+        setData(orders);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, [search]);
 
   const columns = [
     {

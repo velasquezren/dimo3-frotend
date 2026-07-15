@@ -1,24 +1,40 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
-import { getCustomers, deactivateCustomer } from '@/lib/store';
+import { fetchCustomers, apiDeactivateCustomer } from '@/lib/api';
 import type { Customer } from '@/lib/types';
 
 export default function ClientesPage() {
   const [search, setSearch] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [modalTarget, setModalTarget] = useState<Customer | null>(null);
+  const [data, setData] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const data = getCustomers(search);
+  useEffect(() => {
+    setLoading(true);
+    fetchCustomers(search)
+      .then((customers) => {
+        setData(customers);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, [search, refreshKey]);
 
   const handleDeactivate = useCallback(() => {
     if (modalTarget) {
-      deactivateCustomer(modalTarget.id);
-      setModalTarget(null);
-      setRefreshKey((k) => k + 1);
+      apiDeactivateCustomer(modalTarget.id)
+        .then(() => {
+          setModalTarget(null);
+          setRefreshKey((k) => k + 1);
+        })
+        .catch(console.error);
     }
   }, [modalTarget]);
 

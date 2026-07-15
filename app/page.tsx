@@ -1,8 +1,39 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getCounts } from '@/lib/store';
+import { fetchCustomers, fetchProducts, fetchOrders } from '@/lib/api';
+
+interface Counts {
+  customers: number;
+  activeCustomers: number;
+  products: number;
+  activeProducts: number;
+  orders: number;
+  pendingOrders: number;
+}
 
 export default function HomePage() {
-  const counts = getCounts();
+  const [counts, setCounts] = useState<Counts>({
+    customers: 0, activeCustomers: 0,
+    products: 0, activeProducts: 0,
+    orders: 0, pendingOrders: 0,
+  });
+
+  useEffect(() => {
+    Promise.all([fetchCustomers(), fetchProducts(), fetchOrders()])
+      .then(([customers, products, orders]) => {
+        setCounts({
+          customers: customers.length,
+          activeCustomers: customers.filter((c) => c.isActive).length,
+          products: products.length,
+          activeProducts: products.filter((p) => p.isActive).length,
+          orders: orders.length,
+          pendingOrders: orders.filter((o) => o.status === 'PENDING').length,
+        });
+      })
+      .catch(console.error);
+  }, []);
 
   const cards = [
     {

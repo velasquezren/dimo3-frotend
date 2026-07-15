@@ -7,10 +7,10 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<OrderStatus, { label: string; colorClass: string }> = {
-  Pending: { label: 'Pendiente', colorClass: 'text-accent-primary' },
-  Confirmed: { label: 'Confirmado', colorClass: 'text-accent-secondary' },
-  Delivered: { label: 'Entregado', colorClass: 'text-text-secondary' },
-  Cancelled: { label: 'Cancelado', colorClass: 'text-alert' },
+  PENDING: { label: 'Pendiente', colorClass: 'text-accent-primary' },
+  CONFIRMED: { label: 'Confirmado', colorClass: 'text-accent-secondary' },
+  DELIVERED: { label: 'Entregado', colorClass: 'text-text-secondary' },
+  CANCELLED: { label: 'Cancelado', colorClass: 'text-alert' },
 };
 
 export default function StatusBadge({ status, animate = false, large = false }: StatusBadgeProps) {

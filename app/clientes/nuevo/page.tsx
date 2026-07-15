@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { createCustomer } from '@/lib/store';
+import { apiCreateCustomer } from '@/lib/api';
 
 export default function NuevoClientePage() {
   const router = useRouter();
@@ -12,6 +12,7 @@ export default function NuevoClientePage() {
   const [phone, setPhone] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
@@ -25,16 +26,19 @@ export default function NuevoClientePage() {
     return Object.keys(newErrors).length === 0;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setGlobalError('');
     if (!validate()) return;
 
-    const result = createCustomer({ fullName, email, phone });
-    if (result.success) {
+    setSubmitting(true);
+    try {
+      await apiCreateCustomer({ fullName, email, phone });
       router.push('/clientes');
-    } else {
-      setGlobalError(result.error || 'Error al crear el cliente.');
+    } catch (err: any) {
+      setGlobalError(err.message || 'Error al crear el cliente.');
+    } finally {
+      setSubmitting(false);
     }
   }
 
