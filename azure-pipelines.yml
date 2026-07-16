@@ -1,0 +1,123 @@
+# Pipeline de CI/CD para Next.js en Azure DevOps (SIN DOCKER)
+# Configurado para desplegar en la Web App "Dimo3" (Node 22 LTS)
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  # 1. Nombre de la Service Connection que crearás en Azure DevOps
+  azureSubscription: 'Dimo-Azure-ServiceConnection'
+  
+  # 2. Nombre exacto de tu App Service en Azure Portal
+  webAppName: 'Dimo3'
+  
+  # Directorio para la caché de npm
+  npm_config_cache: $(Pipeline.Workspace)/.npm
+
+stages:
+  # ==========================================
+  # STAGE 1: CI (Integración Continua & Build)
+  # ==========================================
+  - stage: Build
+    displayName: 'CI - Build y Empaquetado'
+    jobs:
+      - job: BuildJob
+        displayName: 'Node.js Build'
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          # 1. Caché de dependencias npm
+          - task: Cache@2
+            displayName: 'Cache de npm'
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+              path: $(npm_config_cache)
+
+          # 2. Instalar Node.js (Alineado con Node 22-LTS de tu App Service)
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '22.x'
+            displayName: 'Instalar Node.js (22.x)'
+
+          # 3. Instalar dependencias
+          - script: |
+              npm ci --prefer-offline --no-audit
+            displayName: 'Instalar Dependencias'
+
+          # 4. Validar Código (ESlint)
+          - script: |
+              npm run lint
+            displayName: 'Ejecutar ESlint'
+
+          # 5. Compilar Next.js (Genera .next/standalone)
+          - script: |
+              npm run build
+            displayName: 'Compilar Aplicación (Next.js Build)'
+            env:
+              BACKEND_URL: $(BACKEND_URL)
+
+          # 6. Preparar la carpeta Standalone (Copiar public y static)
+          - script: |
+              cp -r public .next/standalone/public
+              cp -r .next/static .next/standalone/.next/static
+            displayName: 'Preparar carpeta Standalone'
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+
+          # 7. Comprimir la compilación a ZIP
+          - task: ArchiveFiles@2
+            displayName: 'Comprimir carpeta Standalone'
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            inputs:
+              rootFolderOrFile: '$(System.DefaultWorkingDirectory)/.next/standalone'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-drop.zip'
+              replaceExistingArchive: true
+
+          # 8. Publicar el artefacto ZIP resultante
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publicar Artefacto ZIP'
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)/frontend-drop.zip'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+
+  # ==========================================
+  # STAGE 2: CD - Despliegue a la Web App "Dimo3"
+  # ==========================================
+  - stage: Deploy
+    displayName: 'CD - Despliegue a App Service'
+    dependsOn: Build
+    # Desplegar en merges/commits directos a develop o main (evitar PRs)
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: DeployJob
+        displayName: 'Desplegar en Dimo3'
+        pool:
+          vmImage: 'ubuntu-latest'
+        # Vinculado a tu entorno en Azure DevOps
+        environment: 'dimo-frontend-prod'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureWebApp@1
+                  displayName: 'Desplegar ZIP de Next.js'
+                  inputs:
+                    azureSubscription: $(azureSubscription)
+                    appType: 'webAppLinux'
+                    appName: $(webAppName)
+                    package: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
+                    startUpCommand: 'node server.js'
