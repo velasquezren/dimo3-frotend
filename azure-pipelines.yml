@@ -120,5 +120,5 @@ stages:
                     ConnectionType: 'AzureRM'
                     azureSubscription: $(azureSubscription)
                     appType: 'webAppLinux'
-                    appName: $(webAppName)
-                    package: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
+                    WebAppName: $(webAppName)
+                    Package: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
