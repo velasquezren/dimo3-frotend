@@ -67,19 +67,21 @@ stages:
             env:
               BACKEND_URL: $(BACKEND_URL)
 
-          # 6. Preparar la carpeta Standalone (Copiar public y static)
+          # 6. Preparar la carpeta Standalone Resolviendo Enlaces Simbólicos (Symlinks)
           - script: |
-              cp -r public .next/standalone/public
-              cp -r .next/static .next/standalone/.next/static
-            displayName: 'Preparar carpeta Standalone'
+              mkdir -p $(System.DefaultWorkingDirectory)/standalone_deploy
+              cp -rL $(System.DefaultWorkingDirectory)/.next/standalone/. $(System.DefaultWorkingDirectory)/standalone_deploy/
+              cp -rL $(System.DefaultWorkingDirectory)/public $(System.DefaultWorkingDirectory)/standalone_deploy/public
+              cp -rL $(System.DefaultWorkingDirectory)/.next/static $(System.DefaultWorkingDirectory)/standalone_deploy/.next/static
+            displayName: 'Preparar carpeta Standalone (Dereference Symlinks)'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
 
-          # 7. Comprimir la compilación a ZIP
+          # 7. Comprimir la compilación física a ZIP
           - task: ArchiveFiles@2
             displayName: 'Comprimir carpeta Standalone'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
             inputs:
-              rootFolderOrFile: '$(System.DefaultWorkingDirectory)/.next/standalone'
+              rootFolderOrFile: '$(System.DefaultWorkingDirectory)/standalone_deploy'
               includeRootFolder: false
               archiveType: 'zip'
               archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-drop.zip'
