@@ -120,4 +120,3 @@ stages:
                     appType: 'webAppLinux'
                     appName: $(webAppName)
                     package: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
-                    startUpCommand: 'node server.js'
