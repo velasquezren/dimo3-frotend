@@ -145,14 +145,12 @@ stages:
           runOnce:
             deploy:
               steps:
-                # Usando AzureRmWebAppDeployment@4 ya que permite configurar el tipo de
-                # conexion explicito y evita el error de msal en deploy de Publish Profile
                 - task: AzureRmWebAppDeployment@4
                   displayName: 'Deploy ZIP Archive'
                   inputs:
-                    ConnectionType: 'PublishProfile'
-                    PublishProfilePath: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
-                    PublishProfileXml: '$(azureSubscription)'
+                    ConnectionType: 'AzureRM'
+                    azureSubscription: $(azureSubscription)
+                    appType: 'webAppLinux'
                     WebAppName: $(webAppName)
                     packageForLinux: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
 
