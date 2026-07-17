@@ -43,10 +43,10 @@ stages:
                 npm | "$(Agent.OS)"
               path: $(npm_config_cache)
 
-          - task: NodeTool@0
-            displayName: 'Install Node.js 22.x'
+          - task: UseNode@1
+            displayName: 'Use Node.js 22.x'
             inputs:
-              versionSpec: '22.x'
+              version: '22.x'
 
           - script: npm ci --prefer-offline --no-audit
             displayName: 'Install dependencies'
