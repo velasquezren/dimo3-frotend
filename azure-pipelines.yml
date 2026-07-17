@@ -1,11 +1,12 @@
-# Pipeline de CI/CD para Next.js en Azure DevOps (SIN DOCKER)
-# Configurado para desplegar en la Web App "Dimo3" (Node 22 LTS)
+# ============================================================
+# Pipeline CI/CD para Next.js (Standalone) → Azure App Service
+# Web App: "Dimo3" — Node 22 LTS — Linux
+# ============================================================
 
 trigger:
   branches:
     include:
       - main
-      - develop
 
 pr:
   branches:
@@ -14,71 +15,79 @@ pr:
       - develop
 
 variables:
-  # 1. Nombre de la Service Connection que crearás en Azure DevOps
   azureSubscription: 'Dimo-Azure-ServiceConnection'
-  
-  # 2. Nombre exacto de tu App Service en Azure Portal
   webAppName: 'Dimo3'
-  
-  # Directorio para la caché de npm
   npm_config_cache: $(Pipeline.Workspace)/.npm
 
+# ============================================================
+# STAGE 1: BUILD (CI)
+# ============================================================
 stages:
-  # ==========================================
-  # STAGE 1: CI (Integración Continua & Build)
-  # ==========================================
   - stage: Build
-    displayName: 'CI - Build y Empaquetado'
+    displayName: '🔨 Build & Package'
     jobs:
       - job: BuildJob
         displayName: 'Node.js Build'
         pool:
           vmImage: 'ubuntu-latest'
         steps:
-          # 1. Caché de dependencias npm
           - task: Cache@2
-            displayName: 'Cache de npm'
+            displayName: '📦 Cache npm'
             inputs:
               key: 'npm | "$(Agent.OS)" | package-lock.json'
               restoreKeys: |
                 npm | "$(Agent.OS)"
               path: $(npm_config_cache)
 
-          # 2. Instalar Node.js (Alineado con Node 22-LTS de tu App Service)
           - task: NodeTool@0
+            displayName: '⬢ Node.js 22.x'
             inputs:
               versionSpec: '22.x'
-            displayName: 'Instalar Node.js (22.x)'
 
-          # 3. Instalar dependencias
-          - script: |
-              npm ci --prefer-offline --no-audit
-            displayName: 'Instalar Dependencias'
+          - script: npm ci --prefer-offline --no-audit
+            displayName: '📥 npm ci'
 
-          # 4. Validar Código (ESlint)
-          - script: |
-              npm run lint
-            displayName: 'Ejecutar ESlint'
+          - script: npm run lint
+            displayName: '🔍 ESLint'
 
-          # 5. Compilar Next.js (Genera .next/standalone)
-          - script: |
-              npm run build
-            displayName: 'Compilar Aplicación (Next.js Build)'
+          - script: npm run build
+            displayName: '🏗️ Next.js Build'
             env:
               BACKEND_URL: $(BACKEND_URL)
 
-          # 6. Preparar la carpeta Standalone Resolviendo Enlaces Simbólicos (Symlinks)
+          # Preparar standalone (resolver symlinks)
           - script: |
-              mkdir -p $(System.DefaultWorkingDirectory)/standalone_deploy
-              cp -rL $(System.DefaultWorkingDirectory)/.next/standalone/. $(System.DefaultWorkingDirectory)/standalone_deploy/
-              cp -rL $(System.DefaultWorkingDirectory)/public $(System.DefaultWorkingDirectory)/standalone_deploy/public
-              cp -rL $(System.DefaultWorkingDirectory)/.next/static $(System.DefaultWorkingDirectory)/standalone_deploy/.next/static
-            displayName: 'Preparar carpeta Standalone (Dereference Symlinks)'
+              set -euo pipefail
+
+              DEPLOY_DIR="$(System.DefaultWorkingDirectory)/standalone_deploy"
+              STANDALONE_DIR="$(System.DefaultWorkingDirectory)/.next/standalone"
+
+              if [ ! -d "$STANDALONE_DIR" ]; then
+                echo "##vso[task.logissue type=error]No se encontró .next/standalone"
+                exit 1
+              fi
+
+              mkdir -p "$DEPLOY_DIR"
+              cp -rL "$STANDALONE_DIR/." "$DEPLOY_DIR/"
+              cp -rL "$(System.DefaultWorkingDirectory)/public" "$DEPLOY_DIR/public"
+              cp -rL "$(System.DefaultWorkingDirectory)/.next/static" "$DEPLOY_DIR/.next/static"
+
+              echo "=== Contenido de standalone_deploy ==="
+              ls -la "$DEPLOY_DIR"
+              echo ""
+              echo "=== Verificando server.js ==="
+              [ -f "$DEPLOY_DIR/server.js" ] && echo "✅ server.js encontrado" || echo "❌ FALTA server.js"
+              echo ""
+              echo "=== Tamaño node_modules standalone ==="
+              du -sh "$DEPLOY_DIR/node_modules" 2>/dev/null || echo "⚠️ Sin node_modules"
+              echo ""
+              echo "=== Tamaño total ==="
+              du -sh "$DEPLOY_DIR"
+            displayName: '📁 Preparar Standalone'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
 
-          # 7. Comprimir la compilación física a ZIP
           - task: ArchiveFiles@2
-            displayName: 'Comprimir carpeta Standalone'
+            displayName: '🗜️ Crear ZIP'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
             inputs:
               rootFolderOrFile: '$(System.DefaultWorkingDirectory)/standalone_deploy'
@@ -87,39 +96,65 @@ stages:
               archiveFile: '$(Build.ArtifactStagingDirectory)/frontend-drop.zip'
               replaceExistingArchive: true
 
-          # 8. Publicar el artefacto ZIP resultante
+          - script: |
+              echo "=== Tamaño del ZIP ==="
+              ls -lh "$(Build.ArtifactStagingDirectory)/frontend-drop.zip"
+              echo ""
+              echo "=== Verificar server.js en raíz del ZIP ==="
+              zipinfo -1 "$(Build.ArtifactStagingDirectory)/frontend-drop.zip" | grep -E "^server\.js$" \
+                && echo "✅ server.js en raíz" \
+                || echo "❌ server.js NO está en la raíz"
+            displayName: '🔎 Verificar ZIP'
+            condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+
           - task: PublishBuildArtifacts@1
-            displayName: 'Publicar Artefacto ZIP'
+            displayName: '📤 Publicar Artefacto'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
             inputs:
               PathtoPublish: '$(Build.ArtifactStagingDirectory)/frontend-drop.zip'
               ArtifactName: 'drop'
               publishLocation: 'Container'
 
-  # ==========================================
-  # STAGE 2: CD - Despliegue a la Web App "Dimo3"
-  # ==========================================
+# ============================================================
+# STAGE 2: DEPLOY (CD)
+# ============================================================
   - stage: Deploy
-    displayName: 'CD - Despliegue a App Service'
+    displayName: '🚀 Deploy a App Service'
     dependsOn: Build
-    # Desplegar en merges/commits directos a develop o main (evitar PRs)
-    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
       - deployment: DeployJob
-        displayName: 'Desplegar en Dimo3'
+        displayName: 'Deploy a Dimo3'
         pool:
           vmImage: 'ubuntu-latest'
-        # Vinculado a tu entorno en Azure DevOps
-        environment: 'dimo-frontend-prod'
+        environment: 'dimo-frontend-production'
         strategy:
           runOnce:
             deploy:
               steps:
+                # Desplegar ZIP con runtimeStack explícito para evitar el bug
                 - task: AzureWebApp@1
-                  displayName: 'Desplegar ZIP de Next.js'
-                  continueOnError: true
+                  displayName: '🚀 Deploy ZIP'
                   inputs:
                     azureSubscription: $(azureSubscription)
                     appType: 'webAppLinux'
                     appName: $(webAppName)
                     package: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
+                    runtimeStack: 'NODE|22-lts'
+                    startUpCommand: 'node server.js'
+
+                # Health check
+                - script: |
+                    echo "Esperando 30s para que la app arranque..."
+                    sleep 30
+
+                    APP_URL="https://dimo3-h6f9adhqgrcbeehh.eastus-01.azurewebsites.net"
+                    echo "Verificando $APP_URL ..."
+                    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL" --max-time 30 || echo "000")
+
+                    if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
+                      echo "✅ App respondiendo con HTTP $HTTP_STATUS"
+                    else
+                      echo "⚠️ HTTP $HTTP_STATUS — revisa los logs en Azure Portal"
+                    fi
+                  displayName: '🏥 Health Check'
