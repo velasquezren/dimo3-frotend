@@ -143,13 +143,8 @@ stages:
           runOnce:
             deploy:
               steps:
-                # NOTA: El deploy ZIP funciona correctamente.
-                # El error "updateStartupCommandAndRuntimeStack" es un bug cosmético
-                # del task con Service Connections tipo Publish Profile.
-                # El startup command ya está configurado en Azure Portal.
                 - task: AzureWebApp@1
                   displayName: '🚀 Deploy ZIP'
-                  continueOnError: true
                   inputs:
                     azureSubscription: $(azureSubscription)
                     appType: 'webAppLinux'
