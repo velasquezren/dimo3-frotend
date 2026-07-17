@@ -72,14 +72,25 @@ stages:
               cp -rL "$(System.DefaultWorkingDirectory)/public" "$DEPLOY_DIR/public"
               cp -rL "$(System.DefaultWorkingDirectory)/.next/static" "$DEPLOY_DIR/.next/static"
 
+              # FIX: Cambiar el script "start" de package.json para que
+              # Oryx ejecute "node server.js" en vez de "next start"
+              node -e "
+                const fs = require('fs');
+                const pkg = JSON.parse(fs.readFileSync('$DEPLOY_DIR/package.json', 'utf8'));
+                pkg.scripts = { start: 'node server.js' };
+                fs.writeFileSync('$DEPLOY_DIR/package.json', JSON.stringify(pkg, null, 2));
+                console.log('✅ package.json actualizado: start → node server.js');
+              "
+
+              # Eliminar manifiestos de Oryx para evitar interferencias
+              rm -f "$DEPLOY_DIR/oryx-manifest.toml" 2>/dev/null || true
+              rm -f "$DEPLOY_DIR/node_modules.tar.gz" 2>/dev/null || true
+
               echo "=== Contenido de standalone_deploy ==="
               ls -la "$DEPLOY_DIR"
               echo ""
-              echo "=== Verificando server.js ==="
-              [ -f "$DEPLOY_DIR/server.js" ] && echo "✅ server.js encontrado" || echo "❌ FALTA server.js"
-              echo ""
-              echo "=== Tamaño node_modules standalone ==="
-              du -sh "$DEPLOY_DIR/node_modules" 2>/dev/null || echo "⚠️ Sin node_modules"
+              echo "=== package.json final ==="
+              cat "$DEPLOY_DIR/package.json"
               echo ""
               echo "=== Tamaño total ==="
               du -sh "$DEPLOY_DIR"
