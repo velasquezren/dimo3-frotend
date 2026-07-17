@@ -15,9 +15,13 @@ pr:
       - develop
 
 variables:
-  azureSubscription: 'Dimo-Azure-ServiceConnection'
-  webAppName: 'Dimo3'
-  npm_config_cache: $(Pipeline.Workspace)/.npm
+  - group: 'Frontend-Secrets'
+  - name: azureSubscription
+    value: 'Dimo-Azure-ServiceConnection'
+  - name: webAppName
+    value: 'Dimo3'
+  - name: npm_config_cache
+    value: $(Pipeline.Workspace)/.npm
 
 # ============================================================
 # STAGE 1: BUILD (CI)
