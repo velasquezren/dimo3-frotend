@@ -1,6 +1,6 @@
 # ============================================================
-# Pipeline CI/CD para Next.js (Standalone) → Azure App Service
-# Web App: "Dimo3" — Node 22 LTS — Linux
+# Pipeline CI/CD para Next.js (Standalone) -> Azure App Service
+# Web App: "Dimo3" - Node 22 LTS - Linux
 # ============================================================
 
 trigger:
@@ -23,12 +23,12 @@ variables:
   - name: npm_config_cache
     value: $(Pipeline.Workspace)/.npm
 
-# ============================================================
-# STAGE 1: BUILD (CI)
-# ============================================================
 stages:
+  # ============================================================
+  # STAGE 1: BUILD (CI)
+  # ============================================================
   - stage: Build
-    displayName: '🔨 Build & Package'
+    displayName: 'Build and Package'
     jobs:
       - job: BuildJob
         displayName: 'Node.js Build'
@@ -36,7 +36,7 @@ stages:
           vmImage: 'ubuntu-latest'
         steps:
           - task: Cache@2
-            displayName: '📦 Cache npm'
+            displayName: 'Cache npm packages'
             inputs:
               key: 'npm | "$(Agent.OS)" | package-lock.json'
               restoreKeys: |
@@ -44,22 +44,21 @@ stages:
               path: $(npm_config_cache)
 
           - task: NodeTool@0
-            displayName: '⬢ Node.js 22.x'
+            displayName: 'Install Node.js 22.x'
             inputs:
               versionSpec: '22.x'
 
           - script: npm ci --prefer-offline --no-audit
-            displayName: '📥 npm ci'
+            displayName: 'Install dependencies'
 
           - script: npm run lint
-            displayName: '🔍 ESLint'
+            displayName: 'Run Linter'
 
           - script: npm run build
-            displayName: '🏗️ Next.js Build'
+            displayName: 'Build Next.js Application'
             env:
               BACKEND_URL: $(BACKEND_URL)
 
-          # Preparar standalone (resolver symlinks)
           - script: |
               set -euo pipefail
 
@@ -67,7 +66,7 @@ stages:
               STANDALONE_DIR="$(System.DefaultWorkingDirectory)/.next/standalone"
 
               if [ ! -d "$STANDALONE_DIR" ]; then
-                echo "##vso[task.logissue type=error]No se encontró .next/standalone"
+                echo "##vso[task.logissue type=error]No se encontro .next/standalone"
                 exit 1
               fi
 
@@ -76,17 +75,16 @@ stages:
               cp -rL "$(System.DefaultWorkingDirectory)/public" "$DEPLOY_DIR/public"
               cp -rL "$(System.DefaultWorkingDirectory)/.next/static" "$DEPLOY_DIR/.next/static"
 
-              # FIX: Cambiar el script "start" de package.json para que
-              # Oryx ejecute "node server.js" en vez de "next start"
+              # Cambiar script start de package.json para ejecucion en App Service
               node -e "
                 const fs = require('fs');
                 const pkg = JSON.parse(fs.readFileSync('$DEPLOY_DIR/package.json', 'utf8'));
                 pkg.scripts = { start: 'node server.js' };
                 fs.writeFileSync('$DEPLOY_DIR/package.json', JSON.stringify(pkg, null, 2));
-                console.log('✅ package.json actualizado: start → node server.js');
+                console.log('package.json actualizado: start -> node server.js');
               "
 
-              # Eliminar manifiestos de Oryx para evitar interferencias
+              # Limpieza de archivos redundantes
               rm -f "$DEPLOY_DIR/oryx-manifest.toml" 2>/dev/null || true
               rm -f "$DEPLOY_DIR/node_modules.tar.gz" 2>/dev/null || true
 
@@ -96,13 +94,13 @@ stages:
               echo "=== package.json final ==="
               cat "$DEPLOY_DIR/package.json"
               echo ""
-              echo "=== Tamaño total ==="
+              echo "=== Tamano total ==="
               du -sh "$DEPLOY_DIR"
-            displayName: '📁 Preparar Standalone'
+            displayName: 'Prepare Standalone Artifacts'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
 
           - task: ArchiveFiles@2
-            displayName: '🗜️ Crear ZIP'
+            displayName: 'Create ZIP archive'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
             inputs:
               rootFolderOrFile: '$(System.DefaultWorkingDirectory)/standalone_deploy'
@@ -112,34 +110,34 @@ stages:
               replaceExistingArchive: true
 
           - script: |
-              echo "=== Tamaño del ZIP ==="
+              echo "=== Tamano del ZIP ==="
               ls -lh "$(Build.ArtifactStagingDirectory)/frontend-drop.zip"
               echo ""
-              echo "=== Verificar server.js en raíz del ZIP ==="
+              echo "=== Validacion del contenido del ZIP ==="
               zipinfo -1 "$(Build.ArtifactStagingDirectory)/frontend-drop.zip" | grep -E "^server\.js$" \
-                && echo "✅ server.js en raíz" \
-                || echo "❌ server.js NO está en la raíz"
-            displayName: '🔎 Verificar ZIP'
+                && echo "Confirmado: server.js en raiz" \
+                || echo "Error: server.js NO se encuentra en la raiz"
+            displayName: 'Verify ZIP Archive'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
 
           - task: PublishBuildArtifacts@1
-            displayName: '📤 Publicar Artefacto'
+            displayName: 'Publish Build Artifacts'
             condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
             inputs:
               PathtoPublish: '$(Build.ArtifactStagingDirectory)/frontend-drop.zip'
               ArtifactName: 'drop'
               publishLocation: 'Container'
 
-# ============================================================
-# STAGE 2: DEPLOY (CD)
-# ============================================================
+  # ============================================================
+  # STAGE 2: DEPLOY (CD)
+  # ============================================================
   - stage: Deploy
-    displayName: '🚀 Deploy a App Service'
+    displayName: 'Deploy to App Service'
     dependsOn: Build
     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
       - deployment: DeployJob
-        displayName: 'Deploy a Dimo3'
+        displayName: 'Deploy to Dimo3 WebApp'
         pool:
           vmImage: 'ubuntu-latest'
         environment: 'dimo-frontend-production'
@@ -147,27 +145,29 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: AzureWebApp@1
-                  displayName: '🚀 Deploy ZIP'
-                  continueOnError: true
+                # Usando AzureRmWebAppDeployment@4 ya que permite configurar el tipo de
+                # conexion explicito y evita el error de msal en deploy de Publish Profile
+                - task: AzureRmWebAppDeployment@4
+                  displayName: 'Deploy ZIP Archive'
                   inputs:
-                    azureSubscription: $(azureSubscription)
-                    appType: 'webAppLinux'
-                    appName: $(webAppName)
-                    package: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
+                    ConnectionType: 'PublishProfile'
+                    PublishProfilePath: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
+                    PublishProfileXml: '$(azureSubscription)'
+                    WebAppName: $(webAppName)
+                    packageForLinux: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
 
-                # Health check
                 - script: |
-                    echo "Esperando 30s para que la app arranque..."
+                    echo "Esperando 30s para arranque de servicios..."
                     sleep 30
 
                     APP_URL="https://dimo3-h6f9adhqgrcbeehh.eastus-01.azurewebsites.net"
-                    echo "Verificando $APP_URL ..."
+                    echo "Verificando respuesta en: $APP_URL"
                     HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL" --max-time 30 || echo "000")
 
                     if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
-                      echo "✅ App respondiendo con HTTP $HTTP_STATUS"
+                      echo "Verificacion de disponibilidad correcta (HTTP $HTTP_STATUS)"
                     else
-                      echo "⚠️ HTTP $HTTP_STATUS — revisa los logs en Azure Portal"
+                      echo "Fallo de respuesta (HTTP $HTTP_STATUS). Verificar logs de ejecucion en el portal de Azure."
+                      exit 1
                     fi
-                  displayName: '🏥 Health Check'
+                  displayName: 'Application Health Check'
