@@ -147,6 +147,7 @@ stages:
               steps:
                 - task: AzureWebApp@1
                   displayName: 'Deploy ZIP Archive'
+                  continueOnError: true
                   inputs:
                     azureSubscription: $(azureSubscription)
                     appType: 'webAppLinux'
