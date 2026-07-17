@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:20-alpine3.20 AS base
 
 # 1. Instalar dependencias solo cuando sea necesario
 FROM base AS deps
@@ -32,14 +32,15 @@ ENV NODE_ENV=production
 # Deshabilitar telemetría de Next.js durante el runtime
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# tini como PID 1: reaping de zombies y reenvío de SIGTERM para shutdown gracioso
+RUN apk add --no-cache tini && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 
 # Setear permisos correctos para el cache de Next.js
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
+RUN mkdir .next && chown nextjs:nodejs .next
 
 # Aprovechar standalone build de Next.js
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -50,5 +51,14 @@ USER nextjs
 EXPOSE 3001
 
 ENV PORT=3001
+ENV HOSTNAME=0.0.0.0
+
+# Verificar que el servidor responde en el puerto expuesto.
+# Se usa 127.0.0.1 (en vez de localhost) para no depender de la resolución DNS
+# de "localhost" dentro del contenedor, que puede no estar configurada.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1:3001/ || exit 1
+
 # server.js es creado por next build cuando se usa standalone output
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "server.js"]
