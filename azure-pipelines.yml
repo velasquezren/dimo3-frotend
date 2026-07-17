@@ -145,14 +145,14 @@ stages:
           runOnce:
             deploy:
               steps:
-                - task: AzureRmWebAppDeployment@4
+                - task: AzureWebApp@1
                   displayName: 'Deploy ZIP Archive'
                   inputs:
-                    ConnectionType: 'AzureRM'
                     azureSubscription: $(azureSubscription)
                     appType: 'webAppLinux'
-                    WebAppName: $(webAppName)
-                    packageForLinux: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
+                    appName: $(webAppName)
+                    package: '$(Pipeline.Workspace)/drop/frontend-drop.zip'
+                    deploymentMethod: 'zipDeploy'
 
                 - script: |
                     echo "Esperando 30s para arranque de servicios..."
