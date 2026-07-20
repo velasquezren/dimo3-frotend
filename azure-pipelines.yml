@@ -17,18 +17,27 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
+  # Variable group con BACKEND_URL (Pipelines -> Library -> Frontend-Secrets).
+  # Se inyecta como --build-arg en build time y queda "horneada" en la imagen.
+  - group: Frontend-Secrets
+
   # Service Connection AWS (configurada en Azure DevOps -> Project settings -> Service connections)
-  awsConnection: 'aws-conection'
+  - name: awsConnection
+    value: 'aws-conection'
 
   # === Ajustar estos valores (o sobreescribirlos desde Azure Pipelines -> Variables) ===
-  awsRegion: 'us-east-1'                 # Región AWS
-  ecrRepository: 'dimo-frontend'         # Nombre del repositorio ECR
-  ecsCluster: 'dimo-prod-cluster'        # Nombre del cluster ECS
-  ecsService: 'dimo-frontend-svc'        # Nombre del service ECS
-  ecsTaskFamily: 'dimo-frontend-task'    # Family del task definition
-  containerName: 'dimo-frontend'         # Debe coincidir con aws/task-definition.json
-  # BACKEND_URL: se lee desde Pipelines -> Library (variable group). Se inyecta en build time
-  #              como --build-arg y queda "horneada" en la imagen, por eso NO va en el task def.
+  - name: awsRegion
+    value: 'us-east-1'                    # Región AWS
+  - name: ecrRepository
+    value: 'dimo-frontend'                # Nombre del repositorio ECR
+  - name: ecsCluster
+    value: 'dimo-prod-cluster'            # Nombre del cluster ECS
+  - name: ecsService
+    value: 'dimo-frontend-svc'            # Nombre del service ECS
+  - name: ecsTaskFamily
+    value: 'dimo-frontend-task'           # Family del task definition
+  - name: containerName
+    value: 'dimo-frontend'                # Debe coincidir con aws/task-definition.json
 
 stages:
   # ---------------------------------------------------------------------------
