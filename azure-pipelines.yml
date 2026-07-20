@@ -89,10 +89,12 @@ stages:
                 set -euo pipefail
                 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
                 echo "AWS Account ID: ${ACCOUNT_ID}"
-                ECR_URI="${ACCOUNT_ID}.dkr.ecr.$(awsRegion).amazonaws.com"
+                REGISTRY="${ACCOUNT_ID}.dkr.ecr.$(awsRegion).amazonaws.com"
+                ECR_URI="${REGISTRY}/$(ecrRepository)"
+                # docker login recibe el host del registro (sin el nombre del repo)
                 aws ecr get-login-password --region $(awsRegion) \
-                  | docker login --username AWS --password-stdin "${ECR_URI}"
-                # Exponer account ID y URI a los pasos siguientes
+                  | docker login --username AWS --password-stdin "${REGISTRY}"
+                # Exponer URI completa (con repo) a los pasos siguientes
                 echo "##vso[task.setvariable variable=awsAccountId]${ACCOUNT_ID}"
                 echo "##vso[task.setvariable variable=ecrUri]${ECR_URI}"
 
