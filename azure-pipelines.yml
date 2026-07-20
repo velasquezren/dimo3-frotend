@@ -1,11 +1,17 @@
 # =============================================================================
 # CI/CD del frontend dimo3-frontend: build Docker -> push ECR -> deploy ECS
 # Trigger: solo pushes a main (producción)
+#
 # Requisitos previos:
+#   - Extensión "AWS Toolkit for Azure DevOps" instalada (provee AWSShellScript@1)
 #   - Service Connection AWS "aws-conection" configurada en Azure DevOps
-#     (con AWS Toolkit for Azure DevOps instalado)
-#   - Infraestructura AWS ya creada: repo ECR, cluster ECS, service, task role,
-#     execution role y (si aplica) ALB/target group. Ver README.md.
+#   - Variable group "Frontend-Secrets" con la variable BACKEND_URL
+#   - Infraestructura AWS ya creada: repo ECR, cluster ECS, service, roles IAM,
+#     log group de CloudWatch. Ver README.md.
+#
+# Nota: la extensión AWS Toolkit NO incluye tasks para ECS, por eso el deploy
+#       se hace con AWS CLI vía AWSShellScript@1 (que inyecta las creds de la
+#       service connection automáticamente, sin exponer secretos).
 # =============================================================================
 
 trigger:
@@ -38,6 +44,11 @@ variables:
     value: 'dimo-frontend-task'           # Family del task definition
   - name: containerName
     value: 'dimo-frontend'                # Debe coincidir con aws/task-definition.json
+  - name: logGroup
+    value: '/ecs/dimo-frontend'           # Log group de CloudWatch
+  # Rol IAM de ejecución (se reemplaza en el placeholder del task def en runtime)
+  - name: executionRoleArn
+    value: 'arn:aws:iam::324486142059:role/ecsTaskExecutionRole'
 
 stages:
   # ---------------------------------------------------------------------------
@@ -67,17 +78,28 @@ stages:
               echo "##vso[task.setvariable variable=shaShort]${SHA}"
             displayName: 'Calcular tags de imagen (semver + BuildId + SHA)'
 
-          # 2. Login a ECR usando la service connection (inyecta AWSaccountID)
-          - task: AmazonECRGetLoginInfo@1
+          # 2. Login a ECR + obtener account ID (AWSShellScript usa la service connection)
+          - task: AWSShellScript@1
             displayName: 'Login a ECR'
             inputs:
               awsCredentials: '$(awsConnection)'
-              region: '$(awsRegion)'
+              regionName: '$(awsRegion)'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                echo "AWS Account ID: ${ACCOUNT_ID}"
+                ECR_URI="${ACCOUNT_ID}.dkr.ecr.$(awsRegion).amazonaws.com"
+                aws ecr get-login-password --region $(awsRegion) \
+                  | docker login --username AWS --password-stdin "${ECR_URI}"
+                # Exponer account ID y URI a los pasos siguientes
+                echo "##vso[task.setvariable variable=awsAccountId]${ACCOUNT_ID}"
+                echo "##vso[task.setvariable variable=ecrUri]${ECR_URI}"
 
-          # 3. Build con los 4 tags (build-arg BACKEND_URL desde la variable secreta)
+          # 3. Build con los 4 tags (build-arg BACKEND_URL desde el variable group)
           - bash: |
               set -euo pipefail
-              URI="$(AWSaccountID).dkr.ecr.$(awsRegion).amazonaws.com/$(ecrRepository)"
+              URI="$(ecrUri)"
               echo "Construyendo imagen -> ${URI}:$(imageTag)"
               docker build \
                 --build-arg BACKEND_URL="$(BACKEND_URL)" \
@@ -86,21 +108,19 @@ stages:
                 -t "${URI}:$(shaShort)" \
                 -t "${URI}:latest" \
                 .
-              echo "##vso[task.setvariable variable=imageUri;isOutput=true]${URI}"
+              # URI completa del tag principal, para el stage de Deploy
+              echo "${URI}:$(imageTag)" > deployimage.txt
+              echo "Imagen a desplegar: ${URI}:$(imageTag)"
             displayName: 'docker build'
-            name: buildImage
 
-          # 4. Push de los 4 tags
+          # 4. Push de los 4 tags (login persiste en el config de Docker del agente)
           - bash: |
               set -euo pipefail
-              URI="$(buildImage.imageUri)"
+              URI="$(ecrUri)"
               for tag in "$(imageTag)" "$(semver)" "$(shaShort)" "latest"; do
                 echo ">>> Push: ${URI}:${tag}"
                 docker push "${URI}:${tag}"
               done
-              # URI completa del tag principal, para el stage de Deploy
-              echo "${URI}:$(imageTag)" > deployimage.txt
-              echo "Imagen a desplegar: ${URI}:$(imageTag)"
             displayName: 'docker push a ECR'
 
           # 5. Publicar artifact con la URI para el stage Deploy
@@ -122,7 +142,7 @@ stages:
             artifact: imageinfo
             displayName: 'Descargar artifact imageinfo'
 
-          # 1. Recuperar la URI de la imagen a desplegar
+          # 1. Recuperar la URI de la imagen a desplegar como variable del job
           - bash: |
               set -euo pipefail
               DEPLOY_IMAGE=$(cat $(Pipeline.Workspace)/imageinfo/deployimage.txt)
@@ -130,24 +150,44 @@ stages:
               echo "##vso[task.setvariable variable=deployImage]${DEPLOY_IMAGE}"
             displayName: 'Leer URI de imagen del artifact'
 
-          # 2. Renderizar el task definition reemplazando la imagen del contenedor
-          - task: AmazonECSRenderTaskDefinition@1
-            displayName: 'Renderizar task definition'
+          # 2. Renderizar task def (reemplazar imagen + placeholders) y registrar
+          - task: AWSShellScript@1
+            displayName: 'Registrar task definition y actualizar service'
             inputs:
               awsCredentials: '$(awsConnection)'
-              region: '$(awsRegion)'
-              taskDefinition: 'aws/task-definition.json'
-              family: '$(ecsTaskFamily)'
-              containerName: '$(containerName)'
-              dockerImage: '$(deployImage)'
-              outputTaskDefinition: 'aws/rendered-task-definition.json'
+              regionName: '$(awsRegion)'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
 
-          # 3. Registrar nueva revision del task def + actualizar el service (rolling)
-          - task: AmazonECSDeployTaskDefinition@1
-            displayName: 'Deploy a ECS'
-            inputs:
-              awsCredentials: '$(awsConnection)'
-              region: '$(awsRegion)'
-              clusterName: '$(ecsCluster)'
-              service-name: '$(ecsService)'
-              taskDefinition: 'aws/rendered-task-definition.json'
+                RENDERED="$(System.DefaultWorkingDirectory)/aws/rendered-task-definition.json"
+                cp aws/task-definition.json "$RENDERED"
+
+                # Reemplazar imagen del contenedor (placeholder del repo)
+                sed -i "s|placeholder_reemplazado_por_el_pipeline|$(deployImage)|g" "$RENDERED"
+
+                # Reemplazar placeholders de configuración
+                sed -i "s|<<AJUSTAR_arn_rol_de_ejecucion>>|$(executionRoleArn)|g" "$RENDERED"
+                sed -i "s|<<AJUSTAR_arn_rol_de_tarea>>|$(executionRoleArn)|g" "$RENDERED"
+                sed -i "s|<<AJUSTAR_nombre_log_group>>|$(logGroup)|g" "$RENDERED"
+
+                echo "=== Task definition renderizado ==="
+                cat "$RENDERED"
+
+                # Registrar la nueva revision del task definition
+                NEW_TASK_ARN=$(aws ecs register-task-definition \
+                  --cli-input-json "file://${RENDERED}" \
+                  --query 'taskDefinition.taskDefinitionArn' --output text)
+                echo "Nueva revision registrada: ${NEW_TASK_ARN}"
+
+                # Actualizar el service para que use la nueva revision (deploy rolling)
+                aws ecs update-service \
+                  --cluster "$(ecsCluster)" \
+                  --service "$(ecsService)" \
+                  --task-definition "$NEW_TASK_ARN" \
+                  --query 'service.{service:serviceName, status:status, desiredCount:desiredCount, taskDef:taskDefinition}' \
+                  --output table
+
+                echo ""
+                echo ">>> Deploy rolling iniciado. Seguilo con:"
+                echo "    aws ecs describe-services --cluster $(ecsCluster) --services $(ecsService)"
