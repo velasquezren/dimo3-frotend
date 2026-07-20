@@ -12,3 +12,20 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .env*.local
+
+# Builds y cachés adicionales
+*.tsbuildinfo
+coverage
+
+# Editores / OS
+.vscode
+.idea
+.DS_Store
+
+# Tests / reports
+test-results
+playwright-report
+
+# Otros Dockerfiles / compose
+Dockerfile.*
+docker-compose*.yml
