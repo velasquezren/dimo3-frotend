@@ -165,6 +165,9 @@ stages:
                 RENDERED="$(System.DefaultWorkingDirectory)/aws/rendered-task-definition.json"
                 cp aws/task-definition.json "$RENDERED"
 
+                # Eliminar campos que ECS no acepta (documentación del JSON)
+                jq 'del(._comment)' "$RENDERED" > "$RENDERED.tmp" && mv "$RENDERED.tmp" "$RENDERED"
+
                 # Reemplazar imagen del contenedor (placeholder del repo)
                 sed -i "s|placeholder_reemplazado_por_el_pipeline|$(deployImage)|g" "$RENDERED"
 
