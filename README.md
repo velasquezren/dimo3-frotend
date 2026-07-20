@@ -63,15 +63,16 @@ En producción, puedes definir la variable `BACKEND_URL` para apuntar a tu conte
 
 El repositorio incluye `azure-pipelines.yml`, un pipeline que se dispara con cada push a `main` y ejecuta:
 
-1. **Build** de la imagen Docker (con `--build-arg BACKEND_URL`).
+1. **Build** de la imagen Docker (inyectando `BACKEND_URL` como build-arg).
 2. **Push** a **AWS ECR** con 4 tags: `<version>-<BuildId>`, `<version>`, `<sha-corto>` y `latest`.
 3. **Deploy** a **AWS ECS** (Fargate) con estrategia **rolling**: registra una nueva revisión del task definition y actualiza el service.
 
-> La **gestión de la infraestructura** (cluster ECS, service, repo ECR, roles IAM, ALB/target group, VPC) queda **fuera del pipeline**: debe existir previamente en AWS. El pipeline solo la consume.
+> **Infra mínima en AWS: solo `ECR` + `ECS`.** El cluster, service y repo ECR deben existir previamente; el pipeline los consume por variables. No requiere Secrets Manager, ALB ni VPC dedicada: `BACKEND_URL` vive en Azure Pipelines y se "hornea" en la imagen en build time, y ECS usa la VPC por defecto de la cuenta.
 
 ### Requisitos previos en Azure DevOps
 - Extensión **AWS Toolkit for Azure DevOps** instalada en la organización.
 - **Service Connection** AWS configurada (nombre esperado: `aws-conection`).
+- Variable **`BACKEND_URL`** en **Pipelines → Library** con la URL del backend de producción.
 
 ### Variables a configurar (Azure Pipelines → Variables)
 | Variable | Descripción | ¿Secreto? |
@@ -83,19 +84,21 @@ El repositorio incluye `azure-pipelines.yml`, un pipeline que se dispara con cad
 | `ecsService` | Nombre del service ECS | No |
 | `ecsTaskFamily` | Family del task definition | No |
 | `containerName` | Nombre del contenedor (debe coincidir con `aws/task-definition.json`) | No |
-| `backendUrl` | URL del backend de producción | **Sí** |
 
-### Requisitos previos en AWS
-Antes de ejecutar el pipeline por primera vez deben existir:
+> `BACKEND_URL` **no** se lista acá porque vive en **Library**, no en las variables del pipeline.
+
+### Requisitos previos en AWS (mínimo: ECR + ECS)
+Antes de ejecutar el pipeline por primera vez deben existir **solo**:
 - **ECR**: repositorio con el nombre de `ecrRepository`.
 - **ECS**: cluster (`ecsCluster`) y service (`ecsService`) con su respectivo task definition family (`ecsTaskFamily`).
-- **Roles IAM**: rol de ejecución (`executionRoleArn`) y rol de tarea (`taskRoleArn`) — ver placeholders `<<AJUSTAR>>` en `aws/task-definition.json`.
-- **ALB + target group** (recomendado) para exponer el puerto 3001 del contenedor.
-- **AWS Secrets Manager**: secreto con la URL del backend, referenciado por el task definition (`BACKEND_URL`).
-- **CloudWatch Logs**: log group referenciado por el task definition.
+- **Rol de ejecución IAM** (`executionRoleArn`): obligatorio para que ECS pueda descargar la imagen de ECR y emitir logs a CloudWatch — se crea una sola vez y se reutiliza. No es un servicio aparte.
+
+Ajustes accesorios (no son servicios que provisiones aparte):
+- **VPC/subnets**: se usa la VPC por defecto de la cuenta.
+- **CloudWatch Logs**: el log groupreferenciado en el task definition (se nombra, no se "crea" como servicio aparte).
 
 ### Plantilla del task definition
-`aws/task-definition.json` es la plantilla base. La imagen del contenedor la reemplaza automáticamente el paso `AmazonECSRenderTaskDefinition`; los campos marcados con `<<AJUSTAR>>` deben completarse con los ARN/nombres de los recursos creados en AWS.
+`aws/task-definition.json` es la plantilla base (Fargate, puerto 3001). La imagen del contenedor la reemplaza automáticamente el paso `AmazonECSRenderTaskDefinition`. Los únicos campos marcados con `<<AJUSTAR>>` son los **ARN de roles IAM** y el **nombre del log group**.
 
 ### Ejecución manual
 Desde Azure DevOps: **Pipelines → seleccionar el pipeline → Run pipeline → Rama `main`**.

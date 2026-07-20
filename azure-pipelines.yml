@@ -27,7 +27,8 @@ variables:
   ecsService: 'dimo-frontend-svc'        # Nombre del service ECS
   ecsTaskFamily: 'dimo-frontend-task'    # Family del task definition
   containerName: 'dimo-frontend'         # Debe coincidir con aws/task-definition.json
-  # backendUrl:  -> definir como VARIABLE SECRETA en Azure Pipelines (URL del backend de producción)
+  # BACKEND_URL: se lee desde Pipelines -> Library (variable group). Se inyecta en build time
+  #              como --build-arg y queda "horneada" en la imagen, por eso NO va en el task def.
 
 stages:
   # ---------------------------------------------------------------------------
@@ -70,7 +71,7 @@ stages:
               URI="$(AWSaccountID).dkr.ecr.$(awsRegion).amazonaws.com/$(ecrRepository)"
               echo "Construyendo imagen -> ${URI}:$(imageTag)"
               docker build \
-                --build-arg BACKEND_URL="$(backendUrl)" \
+                --build-arg BACKEND_URL="$(BACKEND_URL)" \
                 -t "${URI}:$(imageTag)" \
                 -t "${URI}:$(semver)" \
                 -t "${URI}:$(shaShort)" \

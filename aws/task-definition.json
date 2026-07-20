@@ -1,5 +1,5 @@
 {
-  "_comment": "Plantilla base del task definition de ECS para dimo3-frontend. La imagen del contenedor la reemplaza el pipeline (AmazonECSRenderTaskDefinition). Ajustar los campos marcados con <<AJUSTAR>>.",
+  "_comment": "Plantilla base del task definition de ECS (Fargate) para dimo3-frontend. La imagen del contenedor la reemplaza el pipeline (AmazonECSRenderTaskDefinition). BACKEND_URL se inyecta en build time (build-arg), por lo que NO va en el task def. Ajustar los campos marcados con <<AJUSTAR>>.",
   "family": "dimo-frontend-task",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
@@ -37,12 +37,6 @@
         {
           "name": "NEXT_TELEMETRY_DISABLED",
           "value": "1"
-        }
-      ],
-      "secrets": [
-        {
-          "name": "BACKEND_URL",
-          "valueFrom": "<<AJUSTAR_arn_secret_manager_backend_url>>"
         }
       ],
       "healthCheck": {
