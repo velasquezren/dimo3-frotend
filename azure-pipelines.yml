@@ -1,0 +1,143 @@
+# =============================================================================
+# CI/CD del frontend dimo3-frontend: build Docker -> push ECR -> deploy ECS
+# Trigger: solo pushes a main (producción)
+# Requisitos previos:
+#   - Service Connection AWS "aws-conection" configurada en Azure DevOps
+#     (con AWS Toolkit for Azure DevOps instalado)
+#   - Infraestructura AWS ya creada: repo ECR, cluster ECS, service, task role,
+#     execution role y (si aplica) ALB/target group. Ver README.md.
+# =============================================================================
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  # Service Connection AWS (configurada en Azure DevOps -> Project settings -> Service connections)
+  awsConnection: 'aws-conection'
+
+  # === Ajustar estos valores (o sobreescribirlos desde Azure Pipelines -> Variables) ===
+  awsRegion: 'us-east-1'                 # Región AWS
+  ecrRepository: 'dimo-frontend'         # Nombre del repositorio ECR
+  ecsCluster: 'dimo-prod-cluster'        # Nombre del cluster ECS
+  ecsService: 'dimo-frontend-svc'        # Nombre del service ECS
+  ecsTaskFamily: 'dimo-frontend-task'    # Family del task definition
+  containerName: 'dimo-frontend'         # Debe coincidir con aws/task-definition.json
+  # backendUrl:  -> definir como VARIABLE SECRETA en Azure Pipelines (URL del backend de producción)
+
+stages:
+  # ---------------------------------------------------------------------------
+  # Stage 1: Construir la imagen y subirla a ECR
+  # ---------------------------------------------------------------------------
+  - stage: BuildPush
+    displayName: 'Build y push a ECR'
+    jobs:
+      - job: BuildAndPush
+        displayName: 'Build y push'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          # 1. Leer semver de package.json y calcular los tags de la imagen
+          - bash: |
+              set -euo pipefail
+              VERSION=$(jq -r '.version' package.json)
+              SHA=$(echo "$(Build.SourceVersion)" | cut -c1-7)
+              IMAGE_TAG="${VERSION}-$(Build.BuildId)"
+              echo "Version package.json : ${VERSION}"
+              echo "BuildId              : $(Build.BuildId)"
+              echo "Commit SHA corto     : ${SHA}"
+              echo "Tag principal        : ${IMAGE_TAG}"
+              echo "##vso[task.setvariable variable=semver]${VERSION}"
+              echo "##vso[task.setvariable variable=imageTag]${IMAGE_TAG}"
+              echo "##vso[task.setvariable variable=shaShort]${SHA}"
+            displayName: 'Calcular tags de imagen (semver + BuildId + SHA)'
+
+          # 2. Login a ECR usando la service connection (inyecta AWSaccountID)
+          - task: AmazonECRGetLoginInfo@1
+            displayName: 'Login a ECR'
+            inputs:
+              awsCredentials: '$(awsConnection)'
+              region: '$(awsRegion)'
+
+          # 3. Build con los 4 tags (build-arg BACKEND_URL desde la variable secreta)
+          - bash: |
+              set -euo pipefail
+              URI="$(AWSaccountID).dkr.ecr.$(awsRegion).amazonaws.com/$(ecrRepository)"
+              echo "Construyendo imagen -> ${URI}:$(imageTag)"
+              docker build \
+                --build-arg BACKEND_URL="$(backendUrl)" \
+                -t "${URI}:$(imageTag)" \
+                -t "${URI}:$(semver)" \
+                -t "${URI}:$(shaShort)" \
+                -t "${URI}:latest" \
+                .
+              echo "##vso[task.setvariable variable=imageUri;isOutput=true]${URI}"
+            displayName: 'docker build'
+            name: buildImage
+
+          # 4. Push de los 4 tags
+          - bash: |
+              set -euo pipefail
+              URI="$(buildImage.imageUri)"
+              for tag in "$(imageTag)" "$(semver)" "$(shaShort)" "latest"; do
+                echo ">>> Push: ${URI}:${tag}"
+                docker push "${URI}:${tag}"
+              done
+              # URI completa del tag principal, para el stage de Deploy
+              echo "${URI}:$(imageTag)" > deployimage.txt
+              echo "Imagen a desplegar: ${URI}:$(imageTag)"
+            displayName: 'docker push a ECR'
+
+          # 5. Publicar artifact con la URI para el stage Deploy
+          - publish: deployimage.txt
+            artifact: imageinfo
+            displayName: 'Publicar artifact imageinfo'
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: Deploy a ECS (rolling: registra nueva revision + service update)
+  # ---------------------------------------------------------------------------
+  - stage: Deploy
+    displayName: 'Deploy a ECS (rolling)'
+    dependsOn: BuildPush
+    jobs:
+      - job: DeployECS
+        displayName: 'Deploy ECS'
+        steps:
+          - download: current
+            artifact: imageinfo
+            displayName: 'Descargar artifact imageinfo'
+
+          # 1. Recuperar la URI de la imagen a desplegar
+          - bash: |
+              set -euo pipefail
+              DEPLOY_IMAGE=$(cat $(Pipeline.Workspace)/imageinfo/deployimage.txt)
+              echo "Imagen a desplegar: ${DEPLOY_IMAGE}"
+              echo "##vso[task.setvariable variable=deployImage]${DEPLOY_IMAGE}"
+            displayName: 'Leer URI de imagen del artifact'
+
+          # 2. Renderizar el task definition reemplazando la imagen del contenedor
+          - task: AmazonECSRenderTaskDefinition@1
+            displayName: 'Renderizar task definition'
+            inputs:
+              awsCredentials: '$(awsConnection)'
+              region: '$(awsRegion)'
+              taskDefinition: 'aws/task-definition.json'
+              family: '$(ecsTaskFamily)'
+              containerName: '$(containerName)'
+              dockerImage: '$(deployImage)'
+              outputTaskDefinition: 'aws/rendered-task-definition.json'
+
+          # 3. Registrar nueva revision del task def + actualizar el service (rolling)
+          - task: AmazonECSDeployTaskDefinition@1
+            displayName: 'Deploy a ECS'
+            inputs:
+              awsCredentials: '$(awsConnection)'
+              region: '$(awsRegion)'
+              clusterName: '$(ecsCluster)'
+              service-name: '$(ecsService)'
+              taskDefinition: 'aws/rendered-task-definition.json'
