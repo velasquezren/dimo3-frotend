@@ -1,11 +1,11 @@
 # ============================================================
 # Dockerfile.unoptimized — Imagen Sin Optimizar (Target de Auditoría)
 # ============================================================
-# NOTA: Esta versión utiliza una imagen base pesada (Debian Bullseye),
+# NOTA: Esta versión utiliza una imagen base pesada (Debian Bookworm/Bullseye),
 # ejecuta el contenedor como usuario ROOT (uid=0), incluye dependencias
 # de desarrollo en producción y no cuenta con HEALTHCHECK.
 
-FROM node:18
+FROM node:20
 
 WORKDIR /app
 
