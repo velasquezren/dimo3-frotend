@@ -1,31 +1,27 @@
+# Dependencias y construcciones locales
 node_modules
 .next
 out
 build
+
+# Control de versiones y CI/CD
 .git
 .gitignore
-Dockerfile
+Dockerfile*
 .dockerignore
-README.md
+azure-pipelines.yml
+aws/
+
+# Archivos de entorno y credenciales (Prevención de fugas de secretos)
+.env
+.env.*
+!.env.example
+
+# Documentación y logs
+*.md
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-.env*.local
-
-# Builds y cachés adicionales
-*.tsbuildinfo
-coverage
-
-# Editores / OS
-.vscode
-.idea
 .DS_Store
 
-# Tests / reports
-test-results
-playwright-report
-
-# Otros Dockerfiles / compose
-Dockerfile.*
-docker-compose*.yml
