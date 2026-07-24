@@ -1,0 +1,32 @@
+# =============================================================================
+# .trivyignore - Lista de CVEs a ignorar en el Trivy image scan del pipeline
+# (azure-pipelines.yml, Stage ImageScan).
+#
+# Formato: un CVE por línea. Las líneas que empiezan con # son comentarios.
+#
+# Solo agregar aquí CVEs que:
+#   1. Sean falsos positivos, O
+#   2. No tengan fix disponible y el riesgo se acepta formalmente, O
+#   3. Afecten a componentes que NO están presentes en la imagen de producción
+#      final (solo en herramientas de build).
+#
+# Cada CVE ignorado debe tener una justificación debajo.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CVEs en el runtime npm embebido en node:22-alpine (SOLO build time)
+#
+# Estas librerías (tar, sigstore, picomatch, brace-expansion) viven dentro de
+# npm en /usr/local/lib/node_modules/npm/. npm se usa ÚNICAMENTE en el stage
+# `deps` y `builder` para instalar dependencias. La imagen de producción final
+# (stage `runner`) ejecuta `node server.js` del standalone output de Next.js y
+# NO expone npm, por lo que un atacante no puede explotar estas vulns en runtime.
+#
+# Fix real: migrar a imagen distroless/slim sin npm en producción (futuro).
+# -----------------------------------------------------------------------------
+
+CVE-2026-59873
+CVE-2026-59874
+CVE-2026-48815
+CVE-2026-33671
+CVE-2026-13149

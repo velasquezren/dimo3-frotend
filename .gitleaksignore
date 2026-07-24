@@ -1,0 +1,17 @@
+# =============================================================================
+# .gitleaksignore - Falsos positivos y allowlist para Gitleaks
+# (azure-pipelines.yml, Stage CodeScan -> Gitleaks).
+#
+# Formato nuevo (Gitleaks >= 8.18): un JSON Lines (JSONL) donde cada línea es
+# un objeto con el Fingerprint del hallazgo a ignorar.
+#
+# Para generar el fingerprint de un hallazgo, correr localmente:
+#   gitleaks detect --source . --report-format json --report-path leaks.json
+# y copiar el campo "Fingerprint" de cada falso positivo a este archivo.
+#
+# TODO: tras la primera corrida del pipeline, revisar los hallazgos y agregar
+#       aquí los fingerprints que sean falsos positivos confirmados.
+# =============================================================================
+
+# Ejemplo de entradas (descomentar y reemplazar los fingerprints reales):
+# {"Fingerprint":"abcdef0123456789:filename:line:column:ruleID"}
