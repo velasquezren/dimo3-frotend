@@ -64,7 +64,7 @@ stages:
   # Si cualquiera falla, el pipeline se detiene (no se construye ni deploya).
   # ---------------------------------------------------------------------------
   - stage: CodeScan
-    displayName: '🔍 Code Scan (lint + audit + secrets)'
+    displayName: 'Code Scan (lint + audit + secrets)'
     jobs:
       - job: CodeQuality
         displayName: 'ESLint + npm audit + Gitleaks'
@@ -210,7 +210,7 @@ stages:
   # Si Trivy detecta HIGH/CRITICAL, el deploy NO se ejecuta.
   # ---------------------------------------------------------------------------
   - stage: ImageScan
-    displayName: '🛡️ Image Scan (Trivy + SBOM)'
+    displayName: 'Image Scan (Trivy + SBOM)'
     dependsOn: BuildPush
     jobs:
       - job: ScanImage
