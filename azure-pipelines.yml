@@ -64,7 +64,7 @@ stages:
   # Si cualquiera falla, el pipeline se detiene (no se construye ni deploya).
   # ---------------------------------------------------------------------------
   - stage: CodeScan
-    displayName: 'Code Scan (lint + audit + secrets)'
+    displayName: '🔍 Code Scan (lint + audit + secrets)'
     jobs:
       - job: CodeQuality
         displayName: 'ESLint + npm audit + Gitleaks'
@@ -73,8 +73,7 @@ stages:
             fetchDepth: 0   # Gitleaks necesita el historial completo
 
           # 0. Instalar Node toolchain (el agente usa Docker por defecto)
-          #    UseNode@1 reemplaza al deprecated NodeTool@0 (mismos inputs)
-          - task: UseNode@1
+          - task: NodeTool@0
             displayName: 'Instalar Node.js 20.x'
             inputs:
               versionSpec: '20.x'
@@ -211,7 +210,7 @@ stages:
   # Si Trivy detecta HIGH/CRITICAL, el deploy NO se ejecuta.
   # ---------------------------------------------------------------------------
   - stage: ImageScan
-    displayName: 'Image Scan (Trivy + SBOM)'
+    displayName: '🛡️ Image Scan (Trivy + SBOM)'
     dependsOn: BuildPush
     jobs:
       - job: ScanImage
