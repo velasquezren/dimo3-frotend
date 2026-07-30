@@ -11,6 +11,7 @@ Dockerfile*
 .dockerignore
 azure-pipelines.yml
 aws/
+terraform/
 
 # Archivos de entorno y credenciales (Prevención de fugas de secretos)
 .env

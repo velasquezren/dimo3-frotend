@@ -1,18 +1,24 @@
 # =============================================================================
 # CI/CD del frontend dimo3-frontend:
-#   CodeScan -> BuildPush -> ImageScan -> Deploy
+#   CodeScan -> BuildPush -> ImageScan -> Terraform -> Deploy
 # Trigger: solo pushes a main (producción)
 #
 # Puertas de seguridad (gates duros, bloquean el deploy si fallan):
-#   - CodeScan : ESLint (errores) + npm audit (CRITICAL) + Gitleaks (secrets)
-#   - ImageScan: Trivy image scan (HIGH/CRITICAL CVEs) + SBOM CycloneDX
+#   - CodeScan  : ESLint (errores) + npm audit (CRITICAL) + Gitleaks (secrets)
+#   - ImageScan : Trivy image scan (HIGH/CRITICAL CVEs) + SBOM CycloneDX
+#
+# Terraform (provisión de infraestructura):
+#   - Provisiona lo que antes se asumía pre-existente: ECR, cluster ECS, roles
+#     IAM, log group de CloudWatch, task definition y service. State LOCAL,
+#     persistido como artifact del pipeline entre runs (ver README).
 #
 # Requisitos previos:
 #   - Extensión "AWS Toolkit for Azure DevOps" instalada (provee AWSShellScript@1)
+#   - Extensión "Terraform Installer" (TerraformInstaller@0) instalada
 #   - Service Connection AWS "aws-conection" configurada en Azure DevOps
 #   - Variable group "Frontend-Secrets" con la variable BACKEND_URL
-#   - Infraestructura AWS ya creada: repo ECR, cluster ECS, service, roles IAM,
-#     log group de CloudWatch. Ver README.md.
+#   - Variable group "Frontend-Terraform" con aws_account_id (12 dígitos)
+#   - Default VPC disponible en la cuenta AWS (o ajustar var.vpc_id en terraform/)
 #
 # Nota: la extensión AWS Toolkit NO incluye tasks para ECS, por eso el deploy
 #       se hace con AWS CLI vía AWSShellScript@1 (que inyecta las creds de la
@@ -31,6 +37,10 @@ variables:
   # Variable group con BACKEND_URL (Pipelines -> Library -> Frontend-Secrets).
   # Se inyecta como --build-arg en build time y queda "horneada" en la imagen.
   - group: Frontend-Secrets
+
+  # Variable group con el ID de cuenta AWS para Terraform
+  # (Pipelines -> Library -> Frontend-Terraform -> aws_account_id).
+  - group: Frontend-Terraform
 
   # Service Connection AWS (configurada en Azure DevOps -> Project settings -> Service connections)
   - name: awsConnection
@@ -284,11 +294,103 @@ stages:
             condition: always()
 
   # ---------------------------------------------------------------------------
-  # Stage 3: Deploy a ECS (rolling: registra nueva revision + service update)
+  # Stage 3: Terraform (provisión de infraestructura AWS)
+  #   - fmt -check    : valida formato de los .tf (falla si hay diferencias)
+  #   - init/validate : inicializa provider y valida la configuración
+  #   - plan/apply    : planea y aplica los cambios (auto-approve, solo main)
+  #
+  # State LOCAL: se persiste como artifact (terraform-state) entre runs para no
+  # perderlo. En cada run se descarga el state anterior, se aplica, y se vuelve
+  # a publicar. Para producción real conviene migrar a backend S3 + DynamoDB.
+  #
+  # Provisiona: ECR, cluster ECS, roles IAM (exec + task), log group CloudWatch,
+  # task definition y service. Lo que el Deploy luego consume para hacer el
+  # rolling update con la imagen recién construida.
+  # ---------------------------------------------------------------------------
+  - stage: Terraform
+    displayName: 'Terraform (Plan + Apply)'
+    dependsOn: ImageScan
+    jobs:
+      - job: TerraformPlanApply
+        displayName: 'terraform fmt + init + validate + plan + apply'
+        steps:
+          - checkout: self
+
+          # 0. Recuperar el state del run anterior (si existe). En el primer run
+          #    no hay artifact y se ignora el error (continueOnError).
+          - download: current
+            artifact: terraform-state
+            displayName: 'Descargar artifact terraform-state (state previo)'
+            continueOnError: true
+            condition: succeededOrFailed()
+
+          - bash: |
+              set -euo pipefail
+              # Si existe el state previo, copiarlo al directorio terraform/
+              STATE_SRC="$(Pipeline.Workspace)/terraform-state/terraform.tfstate"
+              if [ -f "$STATE_SRC" ]; then
+                cp "$STATE_SRC" terraform/terraform.tfstate
+                echo "State previo recuperado."
+              else
+                echo "No hay state previo (primer run o artifact ausente). Se inicia fresco."
+              fi
+            displayName: 'Restaurar terraform.tfstate'
+
+          # 1. Instalar Terraform (extensión TerraformInstaller@0)
+          - task: TerraformInstaller@0
+            displayName: 'Instalar Terraform'
+            inputs:
+              terraformVersion: '1.9.8'
+
+          # 2. fmt -check: falla si los .tf no están formateados
+          - bash: |
+              set -euo pipefail
+              terraform fmt -check -recursive terraform/
+              echo "Formato Terraform OK"
+            displayName: 'terraform fmt -check'
+
+          # 3. init + validate + plan + apply (con creds de la service connection AWS)
+          - task: AWSShellScript@1
+            displayName: 'terraform init + validate + plan + apply'
+            inputs:
+              awsCredentials: '$(awsConnection)'
+              regionName: '$(awsRegion)'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+                cd terraform
+
+                # Generar terraform.tfvars en runtime (no se commitea).
+                # aws_account_id viene del variable group Frontend-Terraform.
+                cat > terraform.tfvars <<EOF
+                aws_account_id = "$(aws_account_id)"
+                aws_region     = "$(awsRegion)"
+                EOF
+
+                echo "=== terraform init ==="
+                terraform init -input=false
+
+                echo "=== terraform validate ==="
+                terraform validate
+
+                echo "=== terraform plan ==="
+                terraform plan -input=false -out=tfplan
+
+                echo "=== terraform apply ==="
+                terraform apply -input=false -auto-approve tfplan
+
+          # 4. Publicar el state actualizado como artifact para el próximo run
+          - publish: terraform/terraform.tfstate
+            artifact: terraform-state
+            displayName: 'Publicar artifact terraform-state (state nuevo)'
+            condition: always()
+
+  # ---------------------------------------------------------------------------
+  # Stage 4: Deploy a ECS (rolling: registra nueva revision + service update)
   # ---------------------------------------------------------------------------
   - stage: Deploy
     displayName: 'Deploy a ECS (rolling)'
-    dependsOn: ImageScan
+    dependsOn: Terraform
     jobs:
       - job: DeployECS
         displayName: 'Deploy ECS'
@@ -305,9 +407,12 @@ stages:
               echo "##vso[task.setvariable variable=deployImage]${DEPLOY_IMAGE}"
             displayName: 'Leer URI de imagen del artifact'
 
-          # 2. Renderizar task def (reemplazar imagen + placeholders) y registrar
+          # 2. Tomar la revision activa del task definition (gestionada por
+          #    Terraform), cambiarle la imagen por la recien construida y
+          #    registrar una nueva revision. Ya no se renderiza JSON con
+          #    placeholders: la forma del contenedor la define Terraform.
           - task: AWSShellScript@1
-            displayName: 'Registrar task definition y actualizar service'
+            displayName: 'Registrar nueva revision (imagen nueva) y actualizar service'
             inputs:
               awsCredentials: '$(awsConnection)'
               regionName: '$(awsRegion)'
@@ -315,30 +420,38 @@ stages:
               inlineScript: |
                 set -euo pipefail
 
-                RENDERED="$(System.DefaultWorkingDirectory)/aws/rendered-task-definition.json"
-                cp aws/task-definition.json "$RENDERED"
+                FAMILY="$(ecsTaskFamily)"
+                CONTAINER="$(containerName)"
 
-                # Eliminar campos que ECS no acepta (documentación del JSON)
-                jq 'del(._comment)' "$RENDERED" > "$RENDERED.tmp" && mv "$RENDERED.tmp" "$RENDERED"
+                # Traer la definicion actual de la familia (la ultima revision activa).
+                # describe-task-definition devuelve la ultima revision por defecto.
+                echo ">>> Obteniendo task definition activa de la familia: ${FAMILY}"
+                aws ecs describe-task-definition \
+                  --task-definition "${FAMILY}" \
+                  --query 'taskDefinition' \
+                  > current-task-def.json
 
-                # Reemplazar imagen del contenedor (placeholder del repo)
-                sed -i "s|placeholder_reemplazado_por_el_pipeline|$(deployImage)|g" "$RENDERED"
+                # Reemplazar la imagen del contenedor objetivo por la nueva.
+                # jq reescribe containerDefinitions[].image solo del contenedor cuyo
+                # name coincide con CONTAINER.
+                jq --arg img "$(deployImage)" --arg name "${CONTAINER}" \
+                  '.containerDefinitions |= map(if .name == $name then .image = $img else . end)' \
+                  current-task-def.json > new-task-def.json
 
-                # Reemplazar placeholders de configuración
-                sed -i "s|<<AJUSTAR_arn_rol_de_ejecucion>>|$(executionRoleArn)|g" "$RENDERED"
-                sed -i "s|<<AJUSTAR_arn_rol_de_tarea>>|$(executionRoleArn)|g" "$RENDERED"
-                sed -i "s|<<AJUSTAR_nombre_log_group>>|$(logGroup)|g" "$RENDERED"
+                # Limpiar campos que register-task-definition no acepta.
+                jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+                  new-task-def.json > new-task-def.clean.json
 
-                echo "=== Task definition renderizado ==="
-                cat "$RENDERED"
+                echo "=== Nueva task definition (imagen actualizada) ==="
+                jq '.containerDefinitions[] | {name, image}' new-task-def.clean.json
 
-                # Registrar la nueva revision del task definition
+                # Registrar la nueva revision.
                 NEW_TASK_ARN=$(aws ecs register-task-definition \
-                  --cli-input-json "file://${RENDERED}" \
+                  --cli-input-json file://new-task-def.clean.json \
                   --query 'taskDefinition.taskDefinitionArn' --output text)
                 echo "Nueva revision registrada: ${NEW_TASK_ARN}"
 
-                # Actualizar el service para que use la nueva revision (deploy rolling)
+                # Actualizar el service para que use la nueva revision (deploy rolling).
                 aws ecs update-service \
                   --cluster "$(ecsCluster)" \
                   --service "$(ecsService)" \
