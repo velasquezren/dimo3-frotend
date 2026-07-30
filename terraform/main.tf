@@ -61,7 +61,16 @@ resource "aws_security_group" "ecs_service" {
 
 # ---------------------------------------------------------------------------
 # ECR: repositorio donde el pipeline pushea la imagen Docker.
+#
+# IMPORT: el repositorio ya existia en AWS (creado manualmente antes de
+# Terraform). El bloque import lo adopta en el state en el primer apply (state
+# vacio); despues queda inerte. Si el repo no existiera, crearlo normal.
 # ---------------------------------------------------------------------------
+import {
+  to = aws_ecr_repository.frontend
+  id = var.ecr_repository_name
+}
+
 resource "aws_ecr_repository" "frontend" {
   name                 = var.ecr_repository_name
   image_tag_mutability = "MUTABLE" # el pipeline reescribe :latest
@@ -112,7 +121,15 @@ resource "aws_ecr_lifecycle_policy" "frontend" {
 
 # ---------------------------------------------------------------------------
 # Cluster ECS.
+#
+# IMPORT: el cluster ya existia en AWS (creado manualmente). El bloque import
+# lo adopta en el state en el primer apply; despues queda inerte.
 # ---------------------------------------------------------------------------
+import {
+  to = aws_ecs_cluster.main
+  id = var.ecs_cluster_name
+}
+
 resource "aws_ecs_cluster" "main" {
   name = var.ecs_cluster_name
 
@@ -130,16 +147,21 @@ resource "aws_ecs_cluster" "main" {
 
 # ---------------------------------------------------------------------------
 # CloudWatch Logs: log group del contenedor.
+#
+# IMPORT: el log group ya existia en AWS (creado manualmente). El bloque import
+# lo adopta en el state en el primer apply; despues queda inerte.
+#
+# NOTA: sin tags. La service connection no tiene el permiso logs:TagResource,
+# asi que no etiquetamos este recurso para esquivar el AccessDenied.
 # ---------------------------------------------------------------------------
+import {
+  to = aws_cloudwatch_log_group.frontend
+  id = var.log_group_name
+}
+
 resource "aws_cloudwatch_log_group" "frontend" {
   name              = var.log_group_name
   retention_in_days = var.log_retention_in_days
-
-  tags = {
-    Name       = var.log_group_name
-    Proyecto   = "dimo3"
-    Componente = "frontend"
-  }
 }
 
 # ---------------------------------------------------------------------------
