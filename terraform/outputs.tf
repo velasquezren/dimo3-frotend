@@ -48,6 +48,6 @@ output "task_role_arn" {
 }
 
 output "log_group_name" {
-  description = "Nombre del log group de CloudWatch."
-  value       = aws_cloudwatch_log_group.frontend.name
+  description = "Nombre del log group de CloudWatch (gestionado fuera de Terraform)."
+  value       = var.log_group_name
 }

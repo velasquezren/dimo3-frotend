@@ -88,15 +88,9 @@ variable "image" {
 # --- CloudWatch Logs ---------------------------------------------------------
 
 variable "log_group_name" {
-  description = "Nombre del log group de CloudWatch."
+  description = "Nombre del log group de CloudWatch (gestionado fuera de Terraform)."
   type        = string
   default     = "/ecs/dimo-frontend"
-}
-
-variable "log_retention_in_days" {
-  description = "Retencion (dias) de los logs en CloudWatch."
-  type        = number
-  default     = 30
 }
 
 # --- Red (VPC por defecto, NO se gestiona) -----------------------------------
