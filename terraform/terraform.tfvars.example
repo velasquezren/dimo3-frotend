@@ -31,8 +31,9 @@ task_desired_count  = 1
 image = ""
 
 # --- CloudWatch Logs ---
-log_group_name        = "/ecs/dimo-frontend"
-log_retention_in_days = 30
+# El log group se gestiona fuera de Terraform (la service connection no tiene
+# permisos de tags sobre CloudWatch). Solo se referencia por nombre.
+log_group_name = "/ecs/dimo-frontend"
 
 # --- VPC ---
 # Vacio = usar la default VPC de la cuenta.

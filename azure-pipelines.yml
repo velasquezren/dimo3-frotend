@@ -316,11 +316,25 @@ stages:
         steps:
           - checkout: self
 
-          # 0. Recuperar el state del run anterior (si existe). En el primer run
-          #    no hay artifact y se ignora el error (continueOnError).
-          - download: current
-            artifact: terraform-state
+          # 0. Recuperar el state del ultimo run de la rama (no del run actual,
+          #    que todavia no publico el artifact). Se busca latestFromBranch.
+          #    Si el run previo fallo sin publicar state, el download no encuentra
+          #    el artifact y se ignora (continueOnError). Importante: esto puede
+          #    dejar recursos huerfanos si un run falla a mitad; ver README.
+          - task: DownloadPipelineArtifact@2
             displayName: 'Descargar artifact terraform-state (state previo)'
+            inputs:
+              buildType: 'specific'
+              project: '$(System.TeamProject)'
+              pipeline: '$(System.DefinitionId)'
+              runVersion: 'latestFromBranch'
+              runBranch: '$(Build.SourceBranch)'
+              artifactName: 'terraform-state'
+              itemPattern: 'terraform.tfstate'
+              targetPath: '$(Pipeline.Workspace)/terraform-state'
+              allowPartiallySucceededBuilds: true
+              allowFailedBuilds: true
+              checkDownloadedFiles: false
             continueOnError: true
             condition: succeededOrFailed()
 

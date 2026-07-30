@@ -148,21 +148,12 @@ resource "aws_ecs_cluster" "main" {
 # ---------------------------------------------------------------------------
 # CloudWatch Logs: log group del contenedor.
 #
-# IMPORT: el log group ya existia en AWS (creado manualmente). El bloque import
-# lo adopta en el state en el primer apply; despues queda inerte.
-#
-# NOTA: sin tags. La service connection no tiene el permiso logs:TagResource,
-# asi que no etiquetamos este recurso para esquivar el AccessDenied.
+# El log group NO se gestiona con Terraform: la service connection (IAM user
+# test1) no tiene logs:ListTagsForResource ni logs:TagResource, y el provider
+# AWS llama a esas APIs al hacer refresh/import incluso sin tags declarados.
+# Por eso lo dejamos fuera del scope y el task def lo referencia por NOMBRE
+# (var.log_group_name). El log group debe existir en AWS (creado manualmente).
 # ---------------------------------------------------------------------------
-import {
-  to = aws_cloudwatch_log_group.frontend
-  id = var.log_group_name
-}
-
-resource "aws_cloudwatch_log_group" "frontend" {
-  name              = var.log_group_name
-  retention_in_days = var.log_retention_in_days
-}
 
 # ---------------------------------------------------------------------------
 # IAM: rol de ejecucion de la tarea.
@@ -256,7 +247,7 @@ locals {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.frontend.name
+          "awslogs-group"         = var.log_group_name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = "ecs"
         }
