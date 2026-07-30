@@ -61,44 +61,74 @@ En producción, puedes definir la variable `BACKEND_URL` para apuntar a tu conte
 
 ## CI/CD (Azure Pipelines + AWS)
 
-El repositorio incluye `azure-pipelines.yml`, un pipeline que se dispara con cada push a `main` y ejecuta:
+El repositorio incluye `azure-pipelines.yml`, un pipeline que se dispara con cada push a `main` y ejecuta cinco stages en cadena:
 
-1. **Build** de la imagen Docker (inyectando `BACKEND_URL` como build-arg).
-2. **Push** a **AWS ECR** con 4 tags: `<version>-<BuildId>`, `<version>`, `<sha-corto>` y `latest`.
-3. **Deploy** a **AWS ECS** (Fargate) con estrategia **rolling**: registra una nueva revisión del task definition y actualiza el service.
+1. **CodeScan** — ESLint (errores), `npm audit` (CRITICAL) y Gitleaks (secretos). Puerta pre-build.
+2. **BuildPush** — Construye la imagen Docker (con `BACKEND_URL` como build-arg) y la sube a **AWS ECR** con 4 tags: `<version>-<BuildId>`, `<version>`, `<sha-corto>` y `latest`.
+3. **ImageScan** — Escaneo con **Trivy** (HIGH/CRITICAL bloquean) + generación de **SBOM CycloneDX**. Puerta pre-deploy.
+4. **Terraform** — Provisiona/actualiza la infraestructura AWS (ECR, cluster ECS, roles IAM, log group, task definition, service). Estado local persistido como artifact entre runs.
+5. **Deploy** — Deploy **rolling** a **AWS ECS** (Fargate): toma la task definition gestionada por Terraform, le actualiza la imagen por la recién construida, registra una nueva revisión y actualiza el service.
 
-> **Infra mínima en AWS: solo `ECR` + `ECS`.** El cluster, service y repo ECR deben existir previamente; el pipeline los consume por variables. No requiere Secrets Manager, ALB ni VPC dedicada: `BACKEND_URL` vive en Azure Pipelines y se "hornea" en la imagen en build time, y ECS usa la VPC por defecto de la cuenta.
+> **Infra gestionada con Terraform.** El cluster ECS, repo ECR, roles IAM, log group, task definition y service ya **no se crean a mano**: los provisiona el stage `Terraform`. Solo se asume la **VPC por defecto** de la cuenta AWS (no se gestiona la VPC).
 
 ### Requisitos previos en Azure DevOps
-- Extensión **AWS Toolkit for Azure DevOps** instalada en la organización.
+- Extensión **AWS Toolkit for Azure DevOps** instalada en la organización (provee `AWSShellScript@1`).
+- Extensión **Terraform Installer** instalada (provee `TerraformInstaller@0`).
 - **Service Connection** AWS configurada (nombre esperado: `aws-conection`).
-- Variable **`BACKEND_URL`** en **Pipelines → Library** con la URL del backend de producción.
+- Variable group **`Frontend-Secrets`** con la variable `BACKEND_URL` (URL del backend de producción).
+- Variable group **`Frontend-Terraform`** con la variable `aws_account_id` (ID de cuenta AWS de 12 dígitos).
 
 ### Variables a configurar (Azure Pipelines → Variables)
 | Variable | Descripción | ¿Secreto? |
 |----------|-------------|-----------|
-| `awsConnection` | Nombre de la Service Connection AWS | No (valor por defecto: `aws-conection`) |
+| `awsConnection` | Nombre de la Service Connection AWS | No (`aws-conection`) |
 | `awsRegion` | Región AWS (ej. `us-east-1`) | No |
 | `ecrRepository` | Nombre del repo ECR | No |
 | `ecsCluster` | Nombre del cluster ECS | No |
 | `ecsService` | Nombre del service ECS | No |
 | `ecsTaskFamily` | Family del task definition | No |
-| `containerName` | Nombre del contenedor (debe coincidir con `aws/task-definition.json`) | No |
+| `containerName` | Nombre del contenedor (debe coincidir con el del task definition) | No |
 
-> `BACKEND_URL` **no** se lista acá porque vive en **Library**, no en las variables del pipeline.
+> `BACKEND_URL` y `aws_account_id` **no** se listan acá porque viven en **Library** (variable groups), no en las variables del pipeline.
 
-### Requisitos previos en AWS (mínimo: ECR + ECS)
-Antes de ejecutar el pipeline por primera vez deben existir **solo**:
-- **ECR**: repositorio con el nombre de `ecrRepository`.
-- **ECS**: cluster (`ecsCluster`) y service (`ecsService`) con su respectivo task definition family (`ecsTaskFamily`).
-- **Rol de ejecución IAM** (`executionRoleArn`): obligatorio para que ECS pueda descargar la imagen de ECR y emitir logs a CloudWatch — se crea una sola vez y se reutiliza. No es un servicio aparte.
+### Requisitos previos en AWS
+- **VPC por defecto** disponible en la cuenta (con subnets). Si no existe, ajustar `var.vpc_id` en `terraform/terraform.tfvars`.
+- Credenciales con permisos para crear ECR, ECS, IAM y CloudWatch (la service connection `aws-conection`).
 
-Ajustes accesorios (no son servicios que provisiones aparte):
-- **VPC/subnets**: se usa la VPC por defecto de la cuenta.
-- **CloudWatch Logs**: el log groupreferenciado en el task definition (se nombra, no se "crea" como servicio aparte).
-
-### Plantilla del task definition
-`aws/task-definition.json` es la plantilla base (Fargate, puerto 3001). La imagen del contenedor la reemplaza automáticamente el paso `AmazonECSRenderTaskDefinition`. Los únicos campos marcados con `<<AJUSTAR>>` son los **ARN de roles IAM** y el **nombre del log group**.
+El resto (ECR, cluster ECS, service, roles IAM, log group, task definition) lo crea Terraform automáticamente en el primer run del pipeline.
 
 ### Ejecución manual
 Desde Azure DevOps: **Pipelines → seleccionar el pipeline → Run pipeline → Rama `main`**.
+
+---
+
+## Infraestructura con Terraform
+
+La infraestructura AWS del proyecto vive en `terraform/` y se gestiona con Terraform. El pipeline ejecuta `terraform fmt -check`, `init`, `validate`, `plan` y `apply` en cada run a `main`.
+
+### Recursos gestionados
+| Recurso | Tipo Terraform |
+|---------|----------------|
+| Repositorio ECR (`dimo-frontend`) + lifecycle policy + scan on push | `aws_ecr_repository`, `aws_ecr_lifecycle_policy` |
+| Cluster ECS (`dimo-prod-cluster`) con Container Insights | `aws_ecs_cluster` |
+| Rol IAM de ejecución (pull ECR + CloudWatch) | `aws_iam_role` + `aws_iam_role_policy_attachment` |
+| Rol IAM de tarea (vacío, la app no llama a AWS) | `aws_iam_role` |
+| Log group CloudWatch (`/ecs/dimo-frontend`) | `aws_cloudwatch_log_group` |
+| Task definition Fargate (puerto 3001, healthCheck wget) | `aws_ecs_task_definition` |
+| Service ECS (`dimo-frontend-svc`) + security group | `aws_ecs_service`, `aws_security_group` |
+
+### Cómo correrlo localmente
+```bash
+cd terraform
+cp terraform.tfvars.example terraform.tfvars   # ajustar aws_account_id
+terraform init
+terraform plan
+terraform apply
+```
+
+### State: importante
+El state es **local** (`terraform/terraform.tfstate`), **sin backend remoto**. En el pipeline, el `.tfstate` se publica como artifact (`terraform-state`) y se descarga al inicio del siguiente run, para mantener continuidad entre builds.
+
+> ⚠️ **Riesgo del state local en CI**: si dos runs se superponen, o si el artifact se pierde, puede haber drift. Para un entorno de producción real, migrar a un **backend remoto** (`s3` + `dynamodb` para locking). Esa migración está fuera del alcance actual.
+
+> El archivo `aws/task-definition.json` queda como referencia histórica; la fuente de verdad del contenedor ahora es `terraform/main.tf`. El deploy del pipeline ya no renderiza ese JSON: toma la revisión activa gestionada por Terraform y solo le cambia la imagen.
