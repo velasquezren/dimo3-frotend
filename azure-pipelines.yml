@@ -519,20 +519,41 @@ stages:
                 for TASK_ARN in ${TASK_ARNS}; do
                   echo ""
                   echo "Tarea: ${TASK_ARN}"
-                  ENI_ID=$(aws ecs describe-tasks \
+
+                  # describe-tasks en JSON para procesar con jq de forma robusta.
+                  aws ecs describe-tasks \
                     --cluster "$(ecsCluster)" \
                     --tasks "${TASK_ARN}" \
-                    --query 'tasks[0].attachments[?type==`ElasticNetworkInterface`].details[?name==`networkInterfaceId`].value' \
-                    --output text)
+                    --query 'tasks[0]' --output json > task.json
 
-                  if [ -z "${ENI_ID}" ]; then
-                    echo "  (sin ENI adjunta)"
+                  # El ENI vive en attachments[type=ElasticNetworkInterface].details,
+                  # como {name: "networkInterfaceId", value: "eni-..."}. Lo extraemos
+                  # recorriendo todos los details del attachment ENI.
+                  ENI_ID=$(jq -r '
+                    .attachments[]?
+                    | select(.type == "ElasticNetworkInterface")
+                    | .details[]
+                    | select(.name == "networkInterfaceId")
+                    | .value
+                  ' task.json | head -n1)
+
+                  if [ -z "${ENI_ID}" ] || [ "${ENI_ID}" = "null" ]; then
+                    echo "  (sin ENI adjunta). Detalle del attachment:"
+                    jq -r '.attachments' task.json
                     continue
                   fi
 
                   PUBLIC_IP=$(aws ec2 describe-network-interfaces \
                     --network-interface-ids "${ENI_ID}" \
                     --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
+
+                  if [ -z "${PUBLIC_IP}" ] || [ "${PUBLIC_IP}" = "None" ]; then
+                    echo "  ENI ${ENI_ID} sin IP publica (¿assign_public_ip=false?)."
+                    echo "  IP privada: $(aws ec2 describe-network-interfaces \
+                      --network-interface-ids "${ENI_ID}" \
+                      --query 'NetworkInterfaces[0].PrivateIpAddress' --output text)"
+                    continue
+                  fi
 
                   echo "  ENI        : ${ENI_ID}"
                   echo "  IP PUBLICA : ${PUBLIC_IP}"
