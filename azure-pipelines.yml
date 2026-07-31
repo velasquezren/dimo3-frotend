@@ -476,3 +476,66 @@ stages:
                 echo ""
                 echo ">>> Deploy rolling iniciado. Seguilo con:"
                 echo "    aws ecs describe-services --cluster $(ecsCluster) --services $(ecsService)"
+
+          # 3. Esperar a que el deploy rolling termine y mostrar la IP publica
+          #    de la(s) tarea(s) corriendo, para poder probar el frontend.
+          #
+          #    IMPORTANTE: como no hay Load Balancer, la IP publica de la tarea
+          #    Fargate es EFIMERA: cambia en cada deploy/reinicio. Esta IP sirve
+          #    para probar el deploy actual; para una URL estable haria falta un
+          #    ALB (fuera del alcance actual).
+          - task: AWSShellScript@1
+            displayName: 'Mostrar IP publica del frontend (post-deploy)'
+            inputs:
+              awsCredentials: '$(awsConnection)'
+              regionName: '$(awsRegion)'
+              scriptType: 'inline'
+              inlineScript: |
+                set -euo pipefail
+
+                echo ">>> Esperando a que el service quede estable (deploy rolling)..."
+                # Hasta 5 minutos esperando que las tareas RUNNING == desiredCount.
+                aws ecs wait services-stable \
+                  --cluster "$(ecsCluster)" \
+                  --services "$(ecsService)" \
+                  || echo "WARN: el service no quedo estable en el timeout, igual mostramos las tareas"
+
+                echo ""
+                echo "=== Tareas RUNNING del service $(ecsService) ==="
+
+                # Listar ARNs de tareas RUNNING del service.
+                TASK_ARNS=$(aws ecs list-tasks \
+                  --cluster "$(ecsCluster)" \
+                  --service-name "$(ecsService)" \
+                  --desired-status RUNNING \
+                  --query 'taskArns' --output text)
+
+                if [ -z "${TASK_ARNS}" ]; then
+                  echo "No hay tareas RUNNING todavia. Revisar logs del contenedor."
+                  exit 0
+                fi
+
+                # Detalle de cada tarea: attachment (ENI) -> networkInterfaceId -> IP publica.
+                for TASK_ARN in ${TASK_ARNS}; do
+                  echo ""
+                  echo "Tarea: ${TASK_ARN}"
+                  ENI_ID=$(aws ecs describe-tasks \
+                    --cluster "$(ecsCluster)" \
+                    --tasks "${TASK_ARN}" \
+                    --query 'tasks[0].attachments[?type==`ElasticNetworkInterface`].details[?name==`networkInterfaceId`].value' \
+                    --output text)
+
+                  if [ -z "${ENI_ID}" ]; then
+                    echo "  (sin ENI adjunta)"
+                    continue
+                  fi
+
+                  PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+                    --network-interface-ids "${ENI_ID}" \
+                    --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
+
+                  echo "  ENI        : ${ENI_ID}"
+                  echo "  IP PUBLICA : ${PUBLIC_IP}"
+                  echo ""
+                  echo "  >>> FRONTEND: http://${PUBLIC_IP}:3001"
+                done
