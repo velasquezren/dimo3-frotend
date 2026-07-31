@@ -277,7 +277,17 @@ resource "aws_ecs_task_definition" "frontend" {
 
 # ---------------------------------------------------------------------------
 # Service ECS (Fargate, redeploy controlado por el pipeline via update-service).
+#
+# IMPORT: el service ya existia en AWS (creado manualmente). El bloque import
+# lo adopta en el state en el primer apply; despues queda inerte.
+# El lifecycle ignore_changes evita que Terraform pelee con el pipeline por la
+# task_definition (que el pipeline actualiza en cada deploy) y el desired_count.
 # ---------------------------------------------------------------------------
+import {
+  to = aws_ecs_service.frontend
+  id = "${var.ecs_cluster_name}/${var.ecs_service_name}"
+}
+
 resource "aws_ecs_service" "frontend" {
   name                               = var.ecs_service_name
   cluster                            = aws_ecs_cluster.main.id
