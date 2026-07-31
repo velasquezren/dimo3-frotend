@@ -16,8 +16,9 @@
 #   - Extensión "AWS Toolkit for Azure DevOps" instalada (provee AWSShellScript@1)
 #   - Extensión "Terraform Installer" (TerraformInstaller@0) instalada
 #   - Service Connection AWS "aws-conection" configurada en Azure DevOps
-#   - Variable group "Frontend-Secrets" con la variable BACKEND_URL
-#   - Variable group "Frontend-Terraform" con aws_account_id (12 dígitos)
+#   - Variable group "Frontend-Terraform" con:
+#       * aws_account_id          (12 dígitos, para Terraform)
+#       * BACKEND_URL_PRODUCTION  (URL del backend de producción, build-arg)
 #   - Default VPC disponible en la cuenta AWS (o ajustar var.vpc_id en terraform/)
 #
 # Nota: la extensión AWS Toolkit NO incluye tasks para ECS, por eso el deploy
@@ -34,12 +35,11 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  # Variable group con BACKEND_URL (Pipelines -> Library -> Frontend-Secrets).
-  # Se inyecta como --build-arg en build time y queda "horneada" en la imagen.
-  - group: Frontend-Secrets
-
-  # Variable group con el ID de cuenta AWS para Terraform
-  # (Pipelines -> Library -> Frontend-Terraform -> aws_account_id).
+  # Variable group con las variables de provisionamiento y deploy
+  # (Pipelines -> Library -> Frontend-Terraform):
+  #   - aws_account_id          : ID de cuenta AWS (12 dígitos) para Terraform
+  #   - BACKEND_URL_PRODUCTION  : URL del backend, se inyecta como --build-arg en
+  #                               build time y queda "horneada" en la imagen.
   - group: Frontend-Terraform
 
   # Service Connection AWS (configurada en Azure DevOps -> Project settings -> Service connections)
@@ -181,13 +181,13 @@ stages:
                 echo "##vso[task.setvariable variable=awsAccountId]${ACCOUNT_ID}"
                 echo "##vso[task.setvariable variable=ecrUri]${ECR_URI}"
 
-          # 3. Build con los 4 tags (build-arg BACKEND_URL desde el variable group)
+          # 3. Build con los 4 tags (build-arg BACKEND_URL_PRODUCTION desde el variable group)
           - bash: |
               set -euo pipefail
               URI="$(ecrUri)"
               echo "Construyendo imagen -> ${URI}:$(imageTag)"
               docker build \
-                --build-arg BACKEND_URL="$(BACKEND_URL)" \
+                --build-arg BACKEND_URL="$(BACKEND_URL_PRODUCTION)" \
                 -t "${URI}:$(imageTag)" \
                 -t "${URI}:$(semver)" \
                 -t "${URI}:$(shaShort)" \
