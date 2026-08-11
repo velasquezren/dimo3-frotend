@@ -61,74 +61,41 @@ En producción, puedes definir la variable `BACKEND_URL` para apuntar a tu conte
 
 ## CI/CD (Azure Pipelines + AWS)
 
-El repositorio incluye `azure-pipelines.yml`, un pipeline que se dispara con cada push a `main` y ejecuta cinco stages en cadena:
+El repositorio incluye `azure-pipelines.yml`, un pipeline que se dispara con cada push a `main` y ejecuta tres stages en cadena:
 
 1. **CodeScan** — ESLint (errores), `npm audit` (CRITICAL) y Gitleaks (secretos). Puerta pre-build.
-2. **BuildPush** — Construye la imagen Docker (con `BACKEND_URL` como build-arg) y la sube a **AWS ECR** con 4 tags: `<version>-<BuildId>`, `<version>`, `<sha-corto>` y `latest`.
-3. **ImageScan** — Escaneo con **Trivy** (HIGH/CRITICAL bloquean) + generación de **SBOM CycloneDX**. Puerta pre-deploy.
-4. **Terraform** — Provisiona/actualiza la infraestructura AWS (ECR, cluster ECS, roles IAM, log group, task definition, service). Estado local persistido como artifact entre runs.
-5. **Deploy** — Deploy **rolling** a **AWS ECS** (Fargate): toma la task definition gestionada por Terraform, le actualiza la imagen por la recién construida, registra una nueva revisión y actualiza el service.
+2. **BuildPush** — Construye la imagen Docker (con `BACKEND_URL` como build-arg) y la sube a **AWS ECR** (`dimo-frontend`) con 4 tags: `<version>-<BuildId>`, `<version>`, `<sha-corto>` y `latest`.
+3. **ImageScan** — Escaneo con **Trivy** (HIGH/CRITICAL bloquean) + generación de **SBOM CycloneDX**.
 
-> **Infra gestionada con Terraform.** El cluster ECS, repo ECR, roles IAM, log group, task definition y service ya **no se crean a mano**: los provisiona el stage `Terraform`. Solo se asume la **VPC por defecto** de la cuenta AWS (no se gestiona la VPC).
+> **El pipeline SOLO construye y publica la imagen Docker.** No provisiona infraestructura ni despliega a ningún orquestador.
+>
+> - **Infraestructura AWS** (VPC, EKS, ECR, IAM): se gestiona en el repo **`dimo3-infra`** con Terraform (ver [`dimo3-infra/README.md`](../dimo3-infra/README.md)).
+> - **Despliegue a Kubernetes (EKS)**: se hará aparte con `kubectl apply` cuando se agreguen los manifiestos en `k8s/` (futuro).
 
 ### Requisitos previos en Azure DevOps
 - Extensión **AWS Toolkit for Azure DevOps** instalada en la organización (provee `AWSShellScript@1`).
-- Extensión **Terraform Installer** instalada (provee `TerraformInstaller@0`).
 - **Service Connection** AWS configurada (nombre esperado: `aws-conection`).
-- Variable group **`Frontend-Secrets`** con la variable `BACKEND_URL` (URL del backend de producción).
-- Variable group **`Frontend-Terraform`** con la variable `aws_account_id` (ID de cuenta AWS de 12 dígitos).
+- Variable group **`Frontend-Terraform`** con la variable `BACKEND_URL_PRODUCTION` (URL del backend de producción, se inyecta como build-arg).
 
 ### Variables a configurar (Azure Pipelines → Variables)
 | Variable | Descripción | ¿Secreto? |
 |----------|-------------|-----------|
 | `awsConnection` | Nombre de la Service Connection AWS | No (`aws-conection`) |
 | `awsRegion` | Región AWS (ej. `us-east-1`) | No |
-| `ecrRepository` | Nombre del repo ECR | No |
-| `ecsCluster` | Nombre del cluster ECS | No |
-| `ecsService` | Nombre del service ECS | No |
-| `ecsTaskFamily` | Family del task definition | No |
-| `containerName` | Nombre del contenedor (debe coincidir con el del task definition) | No |
+| `ecrRepository` | Nombre del repo ECR (`dimo-frontend`, gestionado por `dimo3-infra`) | No |
 
-> `BACKEND_URL` y `aws_account_id` **no** se listan acá porque viven en **Library** (variable groups), no en las variables del pipeline.
+> `BACKEND_URL_PRODUCTION` **no** se lista acá porque vive en **Library** (variable group `Frontend-Terraform`).
 
 ### Requisitos previos en AWS
-- **VPC por defecto** disponible en la cuenta (con subnets). Si no existe, ajustar `var.vpc_id` en `terraform/terraform.tfvars`.
-- Credenciales con permisos para crear ECR, ECS, IAM y CloudWatch (la service connection `aws-conection`).
-
-El resto (ECR, cluster ECS, service, roles IAM, log group, task definition) lo crea Terraform automáticamente en el primer run del pipeline.
+- Repositorio **ECR `dimo-frontend`** existente en la cuenta AWS (lo crea el Terraform de `dimo3-infra`).
+- Credenciales con permisos para hacer push a ECR (la service connection `aws-conection`).
 
 ### Ejecución manual
 Desde Azure DevOps: **Pipelines → seleccionar el pipeline → Run pipeline → Rama `main`**.
 
 ---
 
-## Infraestructura con Terraform
+## Infraestructura y despliegue
 
-La infraestructura AWS del proyecto vive en `terraform/` y se gestiona con Terraform. El pipeline ejecuta `terraform fmt -check`, `init`, `validate`, `plan` y `apply` en cada run a `main`.
-
-### Recursos gestionados
-| Recurso | Tipo Terraform |
-|---------|----------------|
-| Repositorio ECR (`dimo-frontend`) + lifecycle policy + scan on push | `aws_ecr_repository`, `aws_ecr_lifecycle_policy` |
-| Cluster ECS (`dimo-prod-cluster`) con Container Insights | `aws_ecs_cluster` |
-| Rol IAM de ejecución (pull ECR + CloudWatch) | `aws_iam_role` + `aws_iam_role_policy_attachment` |
-| Rol IAM de tarea (vacío, la app no llama a AWS) | `aws_iam_role` |
-| Log group CloudWatch (`/ecs/dimo-frontend`) | `aws_cloudwatch_log_group` |
-| Task definition Fargate (puerto 3001, healthCheck wget) | `aws_ecs_task_definition` |
-| Service ECS (`dimo-frontend-svc`) + security group | `aws_ecs_service`, `aws_security_group` |
-
-### Cómo correrlo localmente
-```bash
-cd terraform
-cp terraform.tfvars.example terraform.tfvars   # ajustar aws_account_id
-terraform init
-terraform plan
-terraform apply
-```
-
-### State: importante
-El state es **local** (`terraform/terraform.tfstate`), **sin backend remoto**. En el pipeline, el `.tfstate` se publica como artifact (`terraform-state`) y se descarga al inicio del siguiente run, para mantener continuidad entre builds.
-
-> ⚠️ **Riesgo del state local en CI**: si dos runs se superponen, o si el artifact se pierde, puede haber drift. Para un entorno de producción real, migrar a un **backend remoto** (`s3` + `dynamodb` para locking). Esa migración está fuera del alcance actual.
-
-> El archivo `aws/task-definition.json` queda como referencia histórica; la fuente de verdad del contenedor ahora es `terraform/main.tf`. El deploy del pipeline ya no renderiza ese JSON: toma la revisión activa gestionada por Terraform y solo le cambia la imagen.
+- **Infraestructura AWS** (cluster EKS, VPC, ECR, IAM, KMS, CloudWatch): gestionada con Terraform en el repo [`dimo3-infra`](../dimo3-infra/). No se incluye en este repo.
+- **Despliegue a Kubernetes**: pendiente. Cuando se implemente, los manifiestos K8s (Deployment, Service, ConfigMap) vivirán en `k8s/` en este repo y se aplicarán con `kubectl` sobre el cluster `dimo3-eks` que provisiona `dimo3-infra`. Ver [`dimo3-infra/docs/K8S-DEPLOYMENT.md`](../dimo3-infra/docs/K8S-DEPLOYMENT.md) para la guía general.
