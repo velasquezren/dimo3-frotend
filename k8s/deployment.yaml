@@ -1,0 +1,91 @@
+# Deployment del frontend (Next.js standalone).
+#
+# - 1 réplica (los nodos t3.micro tienen 1 GB RAM, ir liviano al principio).
+# - Imagen desde ECR privado de la misma cuenta AWS. El cluster EKS hace pull
+#   automáticamente: el node group tiene la policy AmazonEC2ContainerRegistryReadOnly
+#   adjunta (la crea el módulo de EKS de dimo3-infra).
+# - Puerto del contenedor: 3001 (coincide con EXPOSE 3001 y ENV PORT=3001 del Dockerfile).
+# - Usuario no-root: nextjs uid 1001 (consistente con USER nextjs del Dockerfile).
+# - Probes httpGet / (mismo path que el HEALTHCHECK del Dockerfile).
+# - Resources ajustados a nodos chicos (t3.micro = 2 vCPU, 1 GB).
+#
+# La imagen referenciada (dimo-frontend:latest) debe existir en ECR. La llena
+# el pipeline del frontend (BuildPush). Ver k8s/README.md sección "Prerrequisitos".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend
+        app.kubernetes.io/part-of: dimo3
+    spec:
+      # Security context a nivel pod: forzar no-root en todos los contenedores.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: 324486142059.dkr.ecr.us-east-1.amazonaws.com/dimo-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 3001
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: frontend-config
+          # Liveness: ¿el pod está vivo? Si falla, K8s lo reinicia.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness: ¿el pod está listo para recibir tráfico? Si falla,
+          # K8s lo saca del Service hasta que recupere.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Resources: ajustados a nodos t3.micro (2 vCPU, 1 GB RAM).
+          # El server Next.js standalone consume ~30-50 MB en idle.
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          # Security context del contenedor: no permitir escalación de privilegios.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

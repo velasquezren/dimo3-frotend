@@ -1,0 +1,49 @@
+# Ingress del frontend usando AWS Load Balancer Controller.
+#
+# Crea un Application Load Balancer (ALB) en AWS que enruta tráfico HTTP/HTTPS
+# desde internet hacia el Service "frontend" del cluster.
+#
+# REQUISITOS:
+#   - AWS Load Balancer Controller instalado en el cluster (Helm o manifiestos).
+#     Sin este controller, el Ingress se crea pero NUNCA provisiona el ALB
+#     (queda en estado pendiente forever).
+#   - Subnet tags correctos en la VPC (kubernetes.io/role/elb = 1 en subnets
+#     públicas). El módulo network de dimo3-infra ya los configura.
+#
+# Annotations clave:
+#   - scheme: internet-facing   → ALB accesible desde internet (público).
+#   - target-type: ip           → el ALB enruta directamente a los Pods (no a nodos).
+#   - listen-ports: 80          → escucha HTTP en puerto 80.
+#                                 (HTTPS requeriría cert-manager + ACM, fuera de scope).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+  annotations:
+    # Usar el AWS Load Balancer Controller (no el ingress-nginx default).
+    kubernetes.io/ingress.class: alb
+    # ALB público (accesible desde internet).
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Target type ip: el ALB enruta directo a los pods (requiere AWS VPC CNI,
+    # que es el default en EKS).
+    alb.ingress.kubernetes.io/target-type: ip
+    # Escuchar HTTP en puerto 80 (sin TLS por ahora; producción usaría HTTPS).
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    # Tags del ALB para identificarlo en la consola AWS.
+    alb.ingress.kubernetes.io/tags: Proyecto=dimo3,Componente=frontend,GestionadoPor=kubernetes
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  name: http

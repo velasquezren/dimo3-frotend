@@ -1,0 +1,20 @@
+# ConfigMap con la configuración del frontend.
+#
+# BACKEND_URL: URL del backend. En Next.js esta variable se resuelve a BUILD TIME
+# (se "hornea" en el bundle al construir la imagen Docker con --build-arg).
+# Por eso el pipeline del frontend usa BACKEND_URL_PRODUCTION como build-arg,
+# y este ConfigMap queda como DOCUMENTACIÓN del contrato y referencia para
+# futuras versiones que puedan leerla en runtime.
+#
+# Acuerdo: el backend se sirve en el Service "backend" (puerto 3000) dentro
+# del mismo namespace "dimo3". K8s resuelve ese nombre automáticamente vía DNS.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+data:
+  BACKEND_URL: "http://backend:3000"

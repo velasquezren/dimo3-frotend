@@ -1,0 +1,14 @@
+# Namespace común para todo el stack dimo3.
+# Idempotente: si el backend o la DB ya lo crearon, este apply no falla
+# (kubectl aplica el mismo manifiesto sin cambios).
+#
+# ACUERDO con el equipo backend:
+#   - Namespace:        dimo3
+#   - Service backend:  backend  (puerto 3000)
+#   - Service postgres: postgres (puerto 5432)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dimo3
+  labels:
+    app.kubernetes.io/part-of: dimo3

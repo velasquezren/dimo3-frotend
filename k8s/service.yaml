@@ -1,0 +1,24 @@
+# Service ClusterIP del frontend.
+#
+# Expone el Deployment dentro del cluster (no accesible desde fuera directamente).
+# El tráfico externo entra por el Ingress (ver ingress.yaml), que enruta al
+# nombre "frontend" que este Service registra en el DNS interno del cluster.
+#
+# Puerto: 3001 (coincide con containerPort del Deployment).
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http
+      protocol: TCP
