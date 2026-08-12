@@ -26,7 +26,7 @@ variables:
   - group: Frontend-Terraform
 
   - name: azureServiceConnection
-    value: 'Dimo-Azure-ServiceConnection'
+    value: 'arm-terraform-conn'
   - name: resourceGroup
     value: 'rg-dimo3-canada'
   - name: aksCluster
