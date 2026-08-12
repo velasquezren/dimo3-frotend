@@ -223,7 +223,8 @@ stages:
         steps:
           - checkout: self
 
-          - download: imageinfo
+          - download: current
+            artifact: imageinfo
             displayName: 'Descargar artefacto imageinfo'
 
           - bash: |
