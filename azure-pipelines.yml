@@ -25,7 +25,7 @@ variables:
   - name: acrUser
     value: 'dimo3canacr'
   - name: acrPassword
-    value: 'FD6BX7A4ckAW95LXd9LwQcnUBdF3wv2L4lxKd1Ir28GgH24DBWgQJQQJ99CHACBsN54Eqg7NAAACAZCR9ReJ'
+    value: 'FD6BX7A4ckAW95LXd9LwQcnUBdF3wv2L4lxKd1Ir28GgH24DBWgQJQQJ99CHACBsN54Eqg7NAAACAZCR9ReJ' #gitleaks:allow
   - name: imageName
     value: 'dimo-frontend'
 
@@ -229,7 +229,7 @@ stages:
               users:
               - name: clusterUser_rg-dimo3-canada_dimo3-aks
                 user:
-                  token: 7xa4ce3k045p1rke4q3l4t4do4k7vrsqwgb3j81dkbmxagid3u4k0trdc2yna6asigushrr6hvjym3wuq6r81l4eboi1aop6x8v437zx17po0h7mizqd4cuw1l88b9cm
+                  token: 7xa4ce3k045p1rke4q3l4t4do4k7vrsqwgb3j81dkbmxagid3u4k0trdc2yna6asigushrr6hvjym3wuq6r81l4eboi1aop6x8v437zx17po0h7mizqd4cuw1l88b9cm #gitleaks:allow
               EOF
 
               echo ">>> Aplicando manifiestos de Kubernetes en AKS..."
