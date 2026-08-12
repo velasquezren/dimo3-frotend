@@ -1,20 +1,17 @@
 # Ingress del frontend usando AWS Load Balancer Controller.
 #
-# Crea un Application Load Balancer (ALB) en AWS que enruta tráfico HTTP/HTTPS
-# desde internet hacia el Service "frontend" del cluster.
+# Crea un Application Load Balancer (ALB) en AWS que enruta tráfico HTTP
+# desde internet hacia el Service "frontend" del clúster EKS.
 #
 # REQUISITOS:
-#   - AWS Load Balancer Controller instalado en el cluster (Helm o manifiestos).
-#     Sin este controller, el Ingress se crea pero NUNCA provisiona el ALB
-#     (queda en estado pendiente forever).
-#   - Subnet tags correctos en la VPC (kubernetes.io/role/elb = 1 en subnets
-#     públicas). El módulo network de dimo3-infra ya los configura.
+#   - AWS Load Balancer Controller instalado en el clúster.
+#   - Subnet tags correctos en la VPC (kubernetes.io/role/elb = 1).
+#     El módulo network de dimo3-infra ya los configura automáticamente.
 #
 # Annotations clave:
-#   - scheme: internet-facing   → ALB accesible desde internet (público).
-#   - target-type: ip           → el ALB enruta directamente a los Pods (no a nodos).
-#   - listen-ports: 80          → escucha HTTP en puerto 80.
-#                                 (HTTPS requeriría cert-manager + ACM, fuera de scope).
+#   - scheme: internet-facing   → ALB accesible públicamente desde internet.
+#   - target-type: ip           → El ALB enruta tráfico directo a las IPs de los Pods.
+#   - listen-ports: 80          → Escucha HTTP en puerto 80.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -24,9 +21,12 @@ metadata:
     app.kubernetes.io/name: frontend
     app.kubernetes.io/part-of: dimo3
   annotations:
-    kubernetes.io/ingress.class: nginx
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
 spec:
-  ingressClassName: nginx
+  ingressClassName: alb
   rules:
     - http:
         paths:
