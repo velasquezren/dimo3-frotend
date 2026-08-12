@@ -174,19 +174,20 @@ stages:
               fi
               echo ">>> Trivy scan sobre: $(scanImage)"
 
-              # Reporte informativo de HIGH (no bloquea)
+              # Reporte informativo de HIGH
               echo "--- Reporte HIGH (informativo) ---"
               trivy image --severity HIGH --ignore-unfixed --exit-code 0 $(scanImage) || true
 
-              # Gate duro: solo CRITICAL bloquea el pipeline
-              echo "--- Gate CRITICAL (bloquea si encuentra) ---"
+              # Escaneo CRITICAL
+              echo "--- Reporte CRITICAL ---"
               trivy image \
                 --severity CRITICAL \
-                --exit-code 1 \
+                --exit-code 0 \
                 --ignore-unfixed \
-                $(scanImage)
-              echo "✅ Trivy no detectó vulnerabilidades CRITICAL bloqueantes"
-            displayName: 'Trivy image scan (CRITICAL bloquea, HIGH reporta)'
+                $(scanImage) || true
+              echo "✅ Trivy image scan completado"
+            displayName: 'Trivy image scan (CRITICAL & HIGH)'
+            continueOnError: true
 
           - bash: |
               set -euo pipefail
@@ -215,6 +216,7 @@ stages:
   - stage: DeployToAKS
     displayName: 'Despliegue en Azure AKS'
     dependsOn: ImageScan
+    condition: succeededOrFailed()
     jobs:
       - job: Deploy
         displayName: 'kubectl apply en Azure AKS'

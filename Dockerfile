@@ -6,8 +6,8 @@ FROM node:22-alpine AS base
 
 # 1. Dependencias de construcción
 FROM base AS deps
-# Actualizar openssl para mitigar CVE-2026-45447 (libcrypto3/libssl3 < 3.5.7)
-RUN apk add --no-cache libc6-compat && apk upgrade --no-cache libcrypto3 libssl3
+# Actualizar paquetes de sistema para mitigar CVEs
+RUN apk update && apk upgrade --no-cache && apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -33,8 +33,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Actualizar openssl para mitigar CVE-2026-45447 (libcrypto3/libssl3 < 3.5.7)
-RUN apk upgrade --no-cache libcrypto3 libssl3
+# Actualizar paquetes de sistema para mitigar CVEs
+RUN apk update && apk upgrade --no-cache
 
 # Crear usuario sin privilegios root (Principio de Menor Privilegio)
 RUN addgroup --system --gid 1001 nodejs && \
