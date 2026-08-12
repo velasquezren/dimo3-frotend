@@ -40,7 +40,9 @@ RUN apk upgrade --no-cache libcrypto3 libssl3
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
+# Copiar assets públicos (si existen tras el build)
+RUN mkdir -p ./public
+COPY --from=builder /app/public/ ./public/
 
 # Crear directorio de cache y asignar permisos restringidos
 RUN mkdir .next && chown -R nextjs:nodejs .next
