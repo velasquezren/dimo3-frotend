@@ -23,10 +23,10 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  - group: Frontend-Azure
+  - group: Frontend-Terraform
 
   - name: azureServiceConnection
-    value: 'Azure-Subscription-ServiceConnection'
+    value: 'Dimo-Azure-ServiceConnection'
   - name: resourceGroup
     value: 'rg-dimo3-canada'
   - name: aksCluster
