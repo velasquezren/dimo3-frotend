@@ -7,11 +7,6 @@
 #   - CodeScan    : ESLint (errores) + npm audit (CRITICAL) + Gitleaks (secrets)
 #   - ImageScan   : Trivy image scan (HIGH/CRITICAL CVEs) + SBOM CycloneDX
 #   - DeployToAKS : Despliegue automatizado en Azure Kubernetes Service (AKS)
-#
-# Requisitos previos en Azure DevOps:
-#   - Service Connection a Azure "Azure-Subscription-ServiceConnection"
-#   - Variable group "Frontend-Azure" con:
-#       * BACKEND_URL_PRODUCTION (URL del backend de producción)
 # =============================================================================
 
 trigger:
@@ -25,16 +20,12 @@ pool:
 variables:
   - group: Frontend-Terraform
 
-  - name: azureServiceConnection
-    value: 'arm-terraform-conn'
-  - name: resourceGroup
-    value: 'rg-dimo3-canada'
-  - name: aksCluster
-    value: 'dimo3-aks'
-  - name: acrName
-    value: 'dimo3canacr'
   - name: acrRegistry
     value: 'dimo3canacr.azurecr.io'
+  - name: acrUser
+    value: 'dimo3canacr'
+  - name: acrPassword
+    value: 'FD6BX7A4ckAW95LXd9LwQcnUBdF3wv2L4lxKd1Ir28GgH24DBWgQJQQJ99CHACBsN54Eqg7NAAACAZCR9ReJ'
   - name: imageName
     value: 'dimo-frontend'
 
@@ -49,7 +40,7 @@ stages:
         displayName: 'ESLint + npm audit + Gitleaks'
         steps:
           - checkout: self
-            fetchDepth: 0   # Gitleaks necesita el historial completo
+            fetchDepth: 0
 
           - task: NodeTool@0
             displayName: 'Instalar Node.js 20.x'
@@ -119,35 +110,30 @@ stages:
               echo "##vso[task.setvariable variable=shaShort]${SHA}"
             displayName: 'Calcular tags de imagen (semver + BuildId + SHA)'
 
-          - task: AzureCLI@2
-            displayName: 'Login a ACR y Build/Push de la imagen'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                set -euo pipefail
-                echo ">>> Autenticando en Azure ACR: $(acrRegistry)"
-                az acr login --name $(acrName)
-                
-                URI="$(acrRegistry)/$(imageName)"
-                echo ">>> Construyendo imagen Docker para Azure..."
-                docker build \
-                  --build-arg BACKEND_URL="$(BACKEND_URL_PRODUCTION)" \
-                  -t "${URI}:$(imageTag)" \
-                  -t "${URI}:$(semver)" \
-                  -t "${URI}:$(shaShort)" \
-                  -t "${URI}:latest" \
-                  .
+          - bash: |
+              set -euo pipefail
+              echo ">>> Autenticando en Azure ACR: $(acrRegistry)"
+              echo "$(acrPassword)" | docker login $(acrRegistry) -u $(acrUser) --password-stdin
 
-                echo ">>> Subiendo tags a Azure ACR..."
-                for tag in "$(imageTag)" "$(semver)" "$(shaShort)" "latest"; do
-                  echo "Pushing: ${URI}:${tag}"
-                  docker push "${URI}:${tag}"
-                done
+              URI="$(acrRegistry)/$(imageName)"
+              echo ">>> Construyendo imagen Docker para Azure..."
+              docker build \
+                --build-arg BACKEND_URL="$(BACKEND_URL_PRODUCTION)" \
+                -t "${URI}:$(imageTag)" \
+                -t "${URI}:$(semver)" \
+                -t "${URI}:$(shaShort)" \
+                -t "${URI}:latest" \
+                .
 
-                echo "${URI}:$(imageTag)" > deployimage.txt
-                echo "✅ Imagen publicada exitosamente en Azure ACR"
+              echo ">>> Subiendo tags a Azure ACR..."
+              for tag in "$(imageTag)" "$(semver)" "$(shaShort)" "latest"; do
+                echo "Pushing: ${URI}:${tag}"
+                docker push "${URI}:${tag}"
+              done
+
+              echo "${URI}:$(imageTag)" > deployimage.txt
+              echo "✅ Imagen publicada exitosamente en Azure ACR"
+            displayName: 'Docker Login, Build y Push a Azure ACR'
 
           - publish: deployimage.txt
             artifact: imageinfo
@@ -173,16 +159,11 @@ stages:
               echo "##vso[task.setvariable variable=scanImage]${SCAN_IMAGE}"
             displayName: 'Leer URI de imagen del artifact'
 
-          - task: AzureCLI@2
-            displayName: 'Pull de la imagen para escanear'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                set -euo pipefail
-                az acr login --name $(acrName)
-                docker pull "$(scanImage)"
+          - bash: |
+              set -euo pipefail
+              echo "$(acrPassword)" | docker login $(acrRegistry) -u $(acrUser) --password-stdin
+              docker pull "$(scanImage)"
+            displayName: 'Pull de la imagen desde Azure ACR'
 
           - bash: |
               set -euo pipefail
@@ -228,21 +209,34 @@ stages:
         steps:
           - checkout: self
 
-          - task: AzureCLI@2
-            displayName: 'Conectar kubectl a AKS y desplegar manifiestos'
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                set -euo pipefail
-                echo ">>> Descargando credenciales de Azure AKS ($(aksCluster))..."
-                az aks get-credentials --resource-group $(resourceGroup) --name $(aksCluster) --overwrite-existing
+          - bash: |
+              set -euo pipefail
+              echo ">>> Configurando credenciales de Kubernetes en la máquina del agente..."
+              mkdir -p ~/.kube
+              cat << 'EOF' > ~/.kube/config
+              apiVersion: v1
+              clusters:
+              - cluster:
+                  server: https://dimo3-aks-rg-dimo3-canada-0cceef-1zb144kf.hcp.canadacentral.azmk8s.io:443
+                name: dimo3-aks
+              contexts:
+              - context:
+                  cluster: dimo3-aks
+                  user: clusterUser_rg-dimo3-canada_dimo3-aks
+                name: dimo3-aks
+              current-context: dimo3-aks
+              kind: Config
+              users:
+              - name: clusterUser_rg-dimo3-canada_dimo3-aks
+                user:
+                  token: 7xa4ce3k045p1rke4q3l4t4do4k7vrsqwgb3j81dkbmxagid3u4k0trdc2yna6asigushrr6hvjym3wuq6r81l4eboi1aop6x8v437zx17po0h7mizqd4cuw1l88b9cm
+              EOF
 
-                echo ">>> Aplicando manifiestos de Kubernetes en AKS..."
-                kubectl apply -f k8s/
+              echo ">>> Aplicando manifiestos de Kubernetes en AKS..."
+              kubectl apply -f k8s/
 
-                echo ">>> Verificando el estado del despliegue..."
-                kubectl rollout status deployment/frontend -n dimo3 --timeout=180s
+              echo ">>> Verificando el estado del despliegue en AKS..."
+              kubectl rollout status deployment/frontend -n dimo3 --timeout=180s
 
-                echo "✅ Despliegue en Azure AKS completado con éxito"
+              echo "✅ Despliegue en Azure AKS completado con éxito"
+            displayName: 'kubectl apply y rollout status en AKS'
