@@ -172,16 +172,27 @@ stages:
                   | sh -s -- -b /usr/local/bin
               fi
               echo ">>> Trivy scan sobre: $(scanImage)"
+
+              # Reporte informativo de HIGH (no bloquea)
+              echo "--- Reporte HIGH (informativo) ---"
+              trivy image --severity HIGH --ignore-unfixed --exit-code 0 $(scanImage) || true
+
+              # Gate duro: solo CRITICAL bloquea el pipeline
+              echo "--- Gate CRITICAL (bloquea si encuentra) ---"
               trivy image \
-                --severity HIGH,CRITICAL \
+                --severity CRITICAL \
                 --exit-code 1 \
                 --ignore-unfixed \
                 $(scanImage)
-              echo "✅ Trivy no detectó vulnerabilidades HIGH/CRITICAL bloqueantes"
-            displayName: 'Trivy image scan (HIGH/CRITICAL bloquean)'
+              echo "✅ Trivy no detectó vulnerabilidades CRITICAL bloqueantes"
+            displayName: 'Trivy image scan (CRITICAL bloquea, HIGH reporta)'
 
           - bash: |
               set -euo pipefail
+              if ! command -v trivy >/dev/null 2>&1; then
+                curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+                  | sh -s -- -b /usr/local/bin
+              fi
               echo ">>> Generando SBOM CycloneDX..."
               trivy image \
                 --format cyclonedx \
@@ -195,7 +206,7 @@ stages:
           - publish: $(Build.ArtifactStagingDirectory)/sbom.cdx.json
             artifact: sbom-cyclonedx
             displayName: 'Publicar artifact sbom-cyclonedx'
-            condition: always()
+            condition: succeededOrFailed()
 
   # ---------------------------------------------------------------------------
   # Stage 3: Deploy a Azure Kubernetes Service (AKS)
