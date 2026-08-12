@@ -116,8 +116,9 @@ stages:
               echo "$(acrPassword)" | docker login $(acrRegistry) -u $(acrUser) --password-stdin
 
               URI="$(acrRegistry)/$(imageName)"
-              echo ">>> Construyendo imagen Docker para Azure..."
+              echo ">>> Construyendo imagen Docker para Azure (linux/amd64)..."
               docker build \
+                --platform linux/amd64 \
                 --build-arg BACKEND_URL="$(BACKEND_URL_PRODUCTION)" \
                 -t "${URI}:$(imageTag)" \
                 -t "${URI}:$(semver)" \
@@ -220,6 +221,9 @@ stages:
         steps:
           - checkout: self
 
+          - download: imageinfo
+            displayName: 'Descargar artefacto imageinfo'
+
           - bash: |
               set -euo pipefail
               echo ">>> Configurando credenciales de Kubernetes..."
@@ -244,8 +248,12 @@ users:
     token: 7xa4ce3k045p1rke4q3l4t4do4k7vrsqwgb3j81dkbmxagid3u4k0trdc2yna6asigushrr6hvjym3wuq6r81l4eboi1aop6x8v437zx17po0h7mizqd4cuw1l88b9cm
 EOF
 
+              DEPLOY_IMAGE=$(cat $(Pipeline.Workspace)/imageinfo/deployimage.txt)
               echo ">>> Aplicando manifiestos de Kubernetes en AKS..."
               kubectl apply -f k8s/
+
+              echo ">>> Actualizando la imagen a ${DEPLOY_IMAGE}..."
+              kubectl set image deployment/frontend frontend="${DEPLOY_IMAGE}" -n dimo3
 
               echo ">>> Verificando el estado del despliegue en AKS..."
               kubectl rollout status deployment/frontend -n dimo3 --timeout=180s
