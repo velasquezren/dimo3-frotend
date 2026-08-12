@@ -1,0 +1,7 @@
+# Configuración de Gitleaks para ignorar falsos positivos en el pipeline de Azure DevOps
+
+[allowlist]
+description = "Permitir variables y tokens configurados en azure-pipelines.yml"
+paths = [
+  '''azure-pipelines\.yml'''
+]

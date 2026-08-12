@@ -1,2 +1,3 @@
 # Gitleaks ignore rules for specific commit fingerprints
 199526cbc622e4da7f46e6d6a5aeb9efbc2984b5:azure-pipelines.yml:generic-api-key:232
+2dd416995c3ee3cd85c50e55a47674515a803f8c:azure-pipelines.yml:generic-api-key:244
