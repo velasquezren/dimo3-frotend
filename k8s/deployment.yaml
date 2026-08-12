@@ -45,7 +45,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: frontend
-          image: 324486142059.dkr.ecr.us-east-1.amazonaws.com/dimo-frontend:latest
+          image: dimo3canacr.azurecr.io/dimo-frontend:latest
           imagePullPolicy: Always
           ports:
             - name: http

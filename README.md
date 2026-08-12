@@ -95,7 +95,13 @@ Desde Azure DevOps: **Pipelines → seleccionar el pipeline → Run pipeline →
 
 ---
 
-## Infraestructura y despliegue
+## Infraestructura y Despliegue en Kubernetes (K8s)
 
-- **Infraestructura AWS** (cluster EKS, VPC, ECR, IAM, KMS, CloudWatch): gestionada con Terraform en el repo [`dimo3-infra`](../dimo3-infra/). No se incluye en este repo.
-- **Despliegue a Kubernetes**: pendiente. Cuando se implemente, los manifiestos K8s (Deployment, Service, ConfigMap) vivirán en `k8s/` en este repo y se aplicarán con `kubectl` sobre el cluster `dimo3-eks` que provisiona `dimo3-infra`. Ver [`dimo3-infra/docs/K8S-DEPLOYMENT.md`](../dimo3-infra/docs/K8S-DEPLOYMENT.md) para la guía general.
+- **Manifiestos K8s**: La carpeta `k8s/` cuenta con el stack completo de producción:
+  - `namespace.yaml`, `configmap.yaml`, `deployment.yaml`
+  - Servicios: `service.yaml` (ClusterIP), `service-nodeport.yaml` (NodePort), `service-canary.yaml` (Canary A/B Testing), `service-headless.yaml` (Headless/Metrics).
+  - Tráfico externo: `ingress.yaml` (AWS ALB Controller).
+  - Escalado y Alta Disponibilidad: `hpa.yaml` (Autoescalado) y `pdb.yaml` (Pod Disruption Budget).
+- **Despliegue rápido**: Ver la guía detallada en [`k8s/README.md`](./k8s/README.md).
+- **Scripts auxiliares**: En la carpeta [`scripts/`](./scripts/) se encuentra `build_and_push.sh` para pruebas de construcción local.
+

@@ -1,0 +1,25 @@
+# Service de tipo NodePort para el frontend.
+#
+# Expone la aplicación frontend directamente en un puerto físico en cada nodo del clúster.
+# Permite acceder al frontend en desarrollo o pruebas directas apuntando a la IP de cualquier nodo.
+#
+# Puerto del servicio: 3001
+# Puerto del nodo (NodePort): 30001 (rango válido en Kubernetes: 30000 - 32767)
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-nodeport
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+    app.kubernetes.io/component: nodeport-service
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: 3001          # Puerto del servicio dentro del clúster
+      targetPort: 3001    # Puerto del contenedor Next.js
+      nodePort: 30001     # Puerto asignado en el Nodo

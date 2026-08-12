@@ -1,23 +1,17 @@
 # =============================================================================
-# CI/CD del frontend dimo3-frontend:
-#   CodeScan -> BuildPush -> ImageScan
+# CI/CD del frontend dimo3-frontend (Azure Cloud Native):
+#   CodeScan -> BuildPush -> ImageScan -> DeployToAKS
 # Trigger: solo pushes a main (producción)
 #
 # Puertas de seguridad (gates duros, bloquean el pipeline si fallan):
-#   - CodeScan  : ESLint (errores) + npm audit (CRITICAL) + Gitleaks (secrets)
-#   - ImageScan : Trivy image scan (HIGH/CRITICAL CVEs) + SBOM CycloneDX
+#   - CodeScan    : ESLint (errores) + npm audit (CRITICAL) + Gitleaks (secrets)
+#   - ImageScan   : Trivy image scan (HIGH/CRITICAL CVEs) + SBOM CycloneDX
+#   - DeployToAKS : Despliegue automatizado en Azure Kubernetes Service (AKS)
 #
-# El pipeline SOLO construye y publica la imagen Docker al ECR `dimo-frontend`.
-# La infraestructura AWS (VPC, EKS, ECR, IAM) se gestiona en el repo
-# `dimo3-infra` con Terraform. El despliegue a Kubernetes (EKS) se hará
-# aparte cuando se agreguen los manifiestos en `k8s/` (futuro).
-#
-# Requisitos previos:
-#   - Extensión "AWS Toolkit for Azure DevOps" instalada (provee AWSShellScript@1)
-#   - Service Connection AWS "aws-conection" configurada en Azure DevOps
-#   - Variable group "Frontend-Terraform" con:
-#       * BACKEND_URL_PRODUCTION  (URL del backend de producción, build-arg)
-#   - ECR `dimo-frontend` existente en la cuenta AWS (lo crea dimo3-infra)
+# Requisitos previos en Azure DevOps:
+#   - Service Connection a Azure "Azure-Subscription-ServiceConnection"
+#   - Variable group "Frontend-Azure" con:
+#       * BACKEND_URL_PRODUCTION (URL del backend de producción)
 # =============================================================================
 
 trigger:
@@ -29,28 +23,24 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  # Variable group compartido (Pipelines -> Library -> Frontend-Terraform):
-  #   - BACKEND_URL_PRODUCTION  : URL del backend, se inyecta como --build-arg en
-  #                               build time y queda "horneada" en la imagen.
-  - group: Frontend-Terraform
+  - group: Frontend-Azure
 
-  # Service Connection AWS (configurada en Azure DevOps -> Project settings -> Service connections)
-  - name: awsConnection
-    value: 'aws-conection'
-
-  # === Ajustar estos valores (o sobreescribirlos desde Azure Pipelines -> Variables) ===
-  - name: awsRegion
-    value: 'us-east-1'                    # Región AWS
-  - name: ecrRepository
-    value: 'dimo-frontend'                # Nombre del repositorio ECR (gestionado por dimo3-infra)
+  - name: azureServiceConnection
+    value: 'Azure-Subscription-ServiceConnection'
+  - name: resourceGroup
+    value: 'rg-dimo3-canada'
+  - name: aksCluster
+    value: 'dimo3-aks'
+  - name: acrName
+    value: 'dimo3canacr'
+  - name: acrRegistry
+    value: 'dimo3canacr.azurecr.io'
+  - name: imageName
+    value: 'dimo-frontend'
 
 stages:
   # ---------------------------------------------------------------------------
   # Stage 0: CodeScan (puerta de calidad pre-build)
-  #   - ESLint: falla solo si hay ERRORES (no warnings)
-  #   - npm audit: falla solo en CRITICAL (las HIGH de next/postcss/sharp se reportan)
-  #   - Gitleaks: escanea TODO el historial git en busca de secretos
-  # Si cualquiera falla, el pipeline se detiene (no se construye ni deploya).
   # ---------------------------------------------------------------------------
   - stage: CodeScan
     displayName: 'Code Scan (lint + audit + secrets)'
@@ -61,48 +51,38 @@ stages:
           - checkout: self
             fetchDepth: 0   # Gitleaks necesita el historial completo
 
-          # 0. Instalar Node toolchain (el agente usa Docker por defecto)
           - task: NodeTool@0
             displayName: 'Instalar Node.js 20.x'
             inputs:
               versionSpec: '20.x'
 
-          # 1. Instalar dependencias
           - bash: |
               set -euo pipefail
               npm ci
             displayName: 'npm ci'
 
-          # 2. ESLint: gatea por ERRORES (exit code != 0). Los warnings no frenan.
-          #    npm run lint -> exit 0 con warnings, exit 1/2 con errores.
           - bash: |
               set -euo pipefail
               echo ">>> Ejecutando ESLint..."
               npm run lint
-              echo "✅ ESLint sin errores (warnings permitidos)"
+              echo "✅ ESLint sin errores"
             displayName: 'ESLint (errores bloquean)'
 
-          # 3. npm audit: gatea en CRITICAL. Reporta HIGH pero no bloquea,
-          #    porque next/postcss/sharp tienen vulns HIGH transitivas sin fix in-range.
           - bash: |
               set +e
               echo ">>> Ejecutando npm audit (nivel CRITICAL)..."
               npm audit --audit-level=critical
               AUDIT_EXIT=$?
               if [ $AUDIT_EXIT -ne 0 ]; then
-                echo "❌ npm audit detectó vulnerabilidades CRITICAL. Revisar logs arriba."
+                echo "❌ npm audit detectó vulnerabilidades CRITICAL."
                 exit $AUDIT_EXIT
               fi
-              echo "✅ npm audit sin CRITICAL (revisar HIGH en log arriba si las hubiera)"
-            displayName: 'npm audit (CRITICAL bloquea, HIGH reporta)'
-            continueOnError: false
+              echo "✅ npm audit sin CRITICAL"
+            displayName: 'npm audit (CRITICAL bloquea)'
 
-          # 4. Gitleaks: escanea todo el repo (historial incluido) en busca de secretos.
-          #    Preinstalado en ubuntu-latest; fallback a descarga del release si no lo está.
           - bash: |
               set -euo pipefail
               if ! command -v gitleaks >/dev/null 2>&1; then
-                echo "Gitleaks no preinstalado, descargando..."
                 VERSION=8.21.2
                 curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
                 tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
@@ -113,19 +93,18 @@ stages:
             displayName: 'Gitleaks (secret scan sobre historial git)'
 
   # ---------------------------------------------------------------------------
-  # Stage 1: Construir la imagen y subirla a ECR
+  # Stage 1: Build & Push a Azure Container Registry (ACR)
   # ---------------------------------------------------------------------------
   - stage: BuildPush
-    displayName: 'Build y push a ECR'
+    displayName: 'Build y push a Azure ACR'
     dependsOn: CodeScan
     jobs:
       - job: BuildAndPush
-        displayName: 'Build y push'
+        displayName: 'Build y push a ACR'
         steps:
           - checkout: self
             fetchDepth: 0
 
-          # 1. Leer semver de package.json y calcular los tags de la imagen
           - bash: |
               set -euo pipefail
               VERSION=$(jq -r '.version' package.json)
@@ -140,76 +119,53 @@ stages:
               echo "##vso[task.setvariable variable=shaShort]${SHA}"
             displayName: 'Calcular tags de imagen (semver + BuildId + SHA)'
 
-          # 2. Login a ECR + obtener account ID (AWSShellScript usa la service connection)
-          - task: AWSShellScript@1
-            displayName: 'Login a ECR'
+          - task: AzureCLI@2
+            displayName: 'Login a ACR y Build/Push de la imagen'
             inputs:
-              awsCredentials: '$(awsConnection)'
-              regionName: '$(awsRegion)'
-              scriptType: 'inline'
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
               inlineScript: |
                 set -euo pipefail
-                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-                echo "AWS Account ID: ${ACCOUNT_ID}"
-                REGISTRY="${ACCOUNT_ID}.dkr.ecr.$(awsRegion).amazonaws.com"
-                ECR_URI="${REGISTRY}/$(ecrRepository)"
-                # docker login recibe el host del registro (sin el nombre del repo)
-                aws ecr get-login-password --region $(awsRegion) \
-                  | docker login --username AWS --password-stdin "${REGISTRY}"
-                # Exponer URI completa (con repo) a los pasos siguientes
-                echo "##vso[task.setvariable variable=awsAccountId]${ACCOUNT_ID}"
-                echo "##vso[task.setvariable variable=ecrUri]${ECR_URI}"
+                echo ">>> Autenticando en Azure ACR: $(acrRegistry)"
+                az acr login --name $(acrName)
+                
+                URI="$(acrRegistry)/$(imageName)"
+                echo ">>> Construyendo imagen Docker para Azure..."
+                docker build \
+                  --build-arg BACKEND_URL="$(BACKEND_URL_PRODUCTION)" \
+                  -t "${URI}:$(imageTag)" \
+                  -t "${URI}:$(semver)" \
+                  -t "${URI}:$(shaShort)" \
+                  -t "${URI}:latest" \
+                  .
 
-          # 3. Build con los 4 tags (build-arg BACKEND_URL_PRODUCTION desde el variable group)
-          - bash: |
-              set -euo pipefail
-              URI="$(ecrUri)"
-              echo "Construyendo imagen -> ${URI}:$(imageTag)"
-              docker build \
-                --build-arg BACKEND_URL="$(BACKEND_URL_PRODUCTION)" \
-                -t "${URI}:$(imageTag)" \
-                -t "${URI}:$(semver)" \
-                -t "${URI}:$(shaShort)" \
-                -t "${URI}:latest" \
-                .
-              # URI completa del tag principal, para el stage de Deploy
-              echo "${URI}:$(imageTag)" > deployimage.txt
-              echo "Imagen a desplegar: ${URI}:$(imageTag)"
-            displayName: 'docker build'
+                echo ">>> Subiendo tags a Azure ACR..."
+                for tag in "$(imageTag)" "$(semver)" "$(shaShort)" "latest"; do
+                  echo "Pushing: ${URI}:${tag}"
+                  docker push "${URI}:${tag}"
+                done
 
-          # 4. Push de los 4 tags (login persiste en el config de Docker del agente)
-          - bash: |
-              set -euo pipefail
-              URI="$(ecrUri)"
-              for tag in "$(imageTag)" "$(semver)" "$(shaShort)" "latest"; do
-                echo ">>> Push: ${URI}:${tag}"
-                docker push "${URI}:${tag}"
-              done
-            displayName: 'docker push a ECR'
+                echo "${URI}:$(imageTag)" > deployimage.txt
+                echo "✅ Imagen publicada exitosamente en Azure ACR"
 
-          # 5. Publicar artifact con la URI para el stage Deploy
           - publish: deployimage.txt
             artifact: imageinfo
             displayName: 'Publicar artifact imageinfo'
 
   # ---------------------------------------------------------------------------
-  # Stage 2: ImageScan (puerta de seguridad post-build, pre-deploy)
-  #   - Trivy image scan: falla si hay CVEs HIGH o CRITICAL en la imagen Docker
-  #   - SBOM CycloneDX: siempre se genera y publica como artifact
-  # Si Trivy detecta HIGH/CRITICAL, el deploy NO se ejecuta.
+  # Stage 2: ImageScan (Trivy + SBOM CycloneDX)
   # ---------------------------------------------------------------------------
   - stage: ImageScan
     displayName: 'Image Scan (Trivy + SBOM)'
     dependsOn: BuildPush
     jobs:
       - job: ScanImage
-        displayName: 'Trivy scan + SBOM CycloneDX'
+        displayName: 'Trivy scan + SBOM'
         steps:
           - download: current
             artifact: imageinfo
-            displayName: 'Descargar artifact imageinfo'
 
-          # 1. Recuperar la URI de la imagen a escanear
           - bash: |
               set -euo pipefail
               SCAN_IMAGE=$(cat $(Pipeline.Workspace)/imageinfo/deployimage.txt)
@@ -217,57 +173,76 @@ stages:
               echo "##vso[task.setvariable variable=scanImage]${SCAN_IMAGE}"
             displayName: 'Leer URI de imagen del artifact'
 
-          # 2. Login a ECR y docker pull (AWSShellScript usa la service connection)
-          - task: AWSShellScript@1
-            displayName: 'Login ECR y pull de imagen'
+          - task: AzureCLI@2
+            displayName: 'Pull de la imagen para escanear'
             inputs:
-              awsCredentials: '$(awsConnection)'
-              regionName: '$(awsRegion)'
-              scriptType: 'inline'
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
               inlineScript: |
                 set -euo pipefail
-                ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-                REGISTRY="${ACCOUNT_ID}.dkr.ecr.$(awsRegion).amazonaws.com"
-                aws ecr get-login-password --region $(awsRegion) \
-                  | docker login --username AWS --password-stdin "${REGISTRY}"
+                az acr login --name $(acrName)
                 docker pull "$(scanImage)"
-                echo "✅ Imagen descargada localmente para escaneo"
 
-          # 3. Trivy image scan: falla (exit 1) si hay HIGH o CRITICAL.
-          #    Preinstalado en ubuntu-latest; fallback a instalación si no lo está.
           - bash: |
               set -euo pipefail
               if ! command -v trivy >/dev/null 2>&1; then
-                echo "Trivy no preinstalado, instalando..."
                 curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
                   | sh -s -- -b /usr/local/bin
               fi
-              echo ">>> Trivy $(trivy --version)"
-              echo ">>> Escaneando imagen: $(scanImage)"
+              echo ">>> Trivy scan sobre: $(scanImage)"
               trivy image \
                 --severity HIGH,CRITICAL \
                 --exit-code 1 \
                 --ignore-unfixed \
                 $(scanImage)
-              echo "✅ Trivy no detectó vulnerabilidades HIGH/CRITICAL con fix disponible"
+              echo "✅ Trivy no detectó vulnerabilidades HIGH/CRITICAL bloqueantes"
             displayName: 'Trivy image scan (HIGH/CRITICAL bloquean)'
 
-          # 4. SBOM CycloneDX de la imagen (siempre se genera, nunca bloquea)
           - bash: |
               set -euo pipefail
-              echo ">>> Generando SBOM CycloneDX de: $(scanImage)"
+              echo ">>> Generando SBOM CycloneDX..."
               trivy image \
                 --format cyclonedx \
                 --output $(Build.ArtifactStagingDirectory)/sbom.cdx.json \
                 --severity UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL \
                 $(scanImage)
-              echo "✅ SBOM generado: sbom.cdx.json"
-              ls -lh $(Build.ArtifactStagingDirectory)/sbom.cdx.json
+              echo "✅ SBOM generado exitosamente"
             displayName: 'Generar SBOM CycloneDX'
             continueOnError: true
 
-          # 5. Publicar SBOM como artifact descargable
           - publish: $(Build.ArtifactStagingDirectory)/sbom.cdx.json
             artifact: sbom-cyclonedx
             displayName: 'Publicar artifact sbom-cyclonedx'
             condition: always()
+
+  # ---------------------------------------------------------------------------
+  # Stage 3: Deploy a Azure Kubernetes Service (AKS)
+  # ---------------------------------------------------------------------------
+  - stage: DeployToAKS
+    displayName: 'Despliegue en Azure AKS'
+    dependsOn: ImageScan
+    jobs:
+      - job: Deploy
+        displayName: 'kubectl apply en Azure AKS'
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: 'Conectar kubectl a AKS y desplegar manifiestos'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                set -euo pipefail
+                echo ">>> Descargando credenciales de Azure AKS ($(aksCluster))..."
+                az aks get-credentials --resource-group $(resourceGroup) --name $(aksCluster) --overwrite-existing
+
+                echo ">>> Aplicando manifiestos de Kubernetes en AKS..."
+                kubectl apply -f k8s/
+
+                echo ">>> Verificando el estado del despliegue..."
+                kubectl rollout status deployment/frontend -n dimo3 --timeout=180s
+
+                echo "✅ Despliegue en Azure AKS completado con éxito"

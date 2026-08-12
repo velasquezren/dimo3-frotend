@@ -1,0 +1,56 @@
+# HorizontalPodAutoscaler (HPA) del frontend.
+#
+# Escala automáticamente las réplicas del Deployment "frontend" en respuesta
+# al consumo de CPU y Memoria RAM.
+#
+# REQUISITOS:
+#   - Metrics Server instalado en el clúster EKS (permite ejecutar `kubectl top pods`).
+#     Sin Metrics Server, el HPA no obtendrá métricas y mostrará estado <unknown>.
+#
+# Parámetros:
+#   - minReplicas: 1 (en baja demanda mantiene 1 pod para optimizar costos).
+#   - maxReplicas: 5 (en picos de tráfico escala hasta 5 pods).
+#   - CPU Target: 70% de utilización promedio sobre los requests (100m).
+#   - Memory Target: 80% de utilización promedio sobre los requests (128Mi).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: frontend-hpa
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+    app.kubernetes.io/component: hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60

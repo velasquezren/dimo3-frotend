@@ -1,0 +1,24 @@
+# Service Canary para versiones de prueba/versión 2 del Frontend.
+#
+# Permite implementar estrategias de despliegue Canary (A/B Testing),
+# donde se puede direccionar tráfico selectivo hacia réplicas de prueba
+# de la nueva versión del frontend antes de liberarla a producción.
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-canary
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+    app.kubernetes.io/component: canary-service
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: frontend
+    version: canary  # Filtra específicamente los pods etiquetados con version=canary
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+      protocol: TCP

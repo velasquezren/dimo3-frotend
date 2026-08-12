@@ -24,19 +24,9 @@ metadata:
     app.kubernetes.io/name: frontend
     app.kubernetes.io/part-of: dimo3
   annotations:
-    # Usar el AWS Load Balancer Controller (no el ingress-nginx default).
-    kubernetes.io/ingress.class: alb
-    # ALB público (accesible desde internet).
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    # Target type ip: el ALB enruta directo a los pods (requiere AWS VPC CNI,
-    # que es el default en EKS).
-    alb.ingress.kubernetes.io/target-type: ip
-    # Escuchar HTTP en puerto 80 (sin TLS por ahora; producción usaría HTTPS).
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
-    # Tags del ALB para identificarlo en la consola AWS.
-    alb.ingress.kubernetes.io/tags: Proyecto=dimo3,Componente=frontend,GestionadoPor=kubernetes
+    kubernetes.io/ingress.class: nginx
 spec:
-  ingressClassName: alb
+  ingressClassName: nginx
   rules:
     - http:
         paths:

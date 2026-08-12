@@ -1,0 +1,22 @@
+# PodDisruptionBudget (PDB) del frontend.
+#
+# Garantiza la Alta Disponibilidad del frontend durante interrupciones voluntarias
+# (mantenimiento de nodos, drain de nodos en AWS EKS o reemplazo de instancias EC2).
+#
+# Parámetros:
+#   - minAvailable: 1 (exige que al menos 1 pod de frontend esté activo y listo en todo momento).
+#   - selector: coincide con los pods del Deployment "frontend".
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+    app.kubernetes.io/component: pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend

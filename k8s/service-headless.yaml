@@ -1,0 +1,26 @@
+# Service Headless (clusterIP: None) del Frontend.
+#
+# Un servicio Headless no asigna una IP virtual única ni balancea tráfico.
+# En su lugar, el DNS de Kubernetes retorna directamente las IPs de CADA POD de frontend activo.
+#
+# Casos de uso principales:
+#   - Monitoreo / Observabilidad: Permite a Prometheus / Grafana scraping directo de métricas por cada pod.
+#   - Comunicación peer-to-peer y descubrimiento directo de pods (Pod Discovery).
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-headless
+  namespace: dimo3
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: dimo3
+    app.kubernetes.io/component: headless-service
+spec:
+  clusterIP: None  # Define que es un servicio Headless
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+      protocol: TCP
